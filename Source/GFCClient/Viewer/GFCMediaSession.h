@@ -30,6 +30,9 @@ public:
 	float GetDurationSeconds() const;
 	bool IsPlaying() const;
 	void TogglePause();
+	/** Jumps to Seconds into the media. */
+	void Seek(float Seconds);
+	void SetLooping(bool bLoop);
 
 	/** Video starts muted in the feed; the user turns sound on. */
 	void SetMuted(bool bInMuted);

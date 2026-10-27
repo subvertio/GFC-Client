@@ -69,6 +69,18 @@ void UGFCMediaSession::TogglePause()
 	}
 }
 
+void UGFCMediaSession::Seek(float Seconds)
+{
+	if (Player && Player->SupportsSeeking())
+	{
+		Player->Seek(FTimespan::FromSeconds(FMath::Max(0.f, Seconds)));
+	}
+}
+void UGFCMediaSession::SetLooping(bool bLoop)
+{
+	if (Player) Player->SetLooping(bLoop);
+}
+
 void UGFCMediaSession::SetMuted(bool bInMuted)
 {
 	bMuted = bInMuted;

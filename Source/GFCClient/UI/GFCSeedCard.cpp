@@ -20,6 +20,7 @@
 #include "GFCCacheSubsystem.h"
 #include "MediaTexture.h"
 #include "Viewer/GFCMediaSession.h"
+#include "Viewer/GFCMusicPlayer.h"
 #include "UI/GFCCreateScreen.h"
 #include "UI/GFCUIStyle.h"
 
@@ -303,7 +304,9 @@ void UGFCSeedCard::UpdateMediaControls()
 		}
 		else if (bPlayable)
 		{
-			Label = Kind == EGFCMediaKind::Video ? LOCTEXT("PlayVideo", "▶ Play video") : LOCTEXT("PlayAudio", "▶ Play audio");
+			const UGFCMusicPlayer* Music = GetGameInstance()->GetSubsystem<UGFCMusicPlayer>();
+			Label = Kind == EGFCMediaKind::Video ? LOCTEXT("PlayVideo", "▶ Play video")
+				: (Music && Music->IsCurrent(Seed.Id) ? LOCTEXT("NowPlaying", "Now playing") : LOCTEXT("PlayAudio", "▶ Play audio"));
 		}
 		else if (Kind == EGFCMediaKind::Model3D)
 		{
@@ -329,7 +332,18 @@ void UGFCSeedCard::UpdateMediaControls()
 void UGFCSeedCard::HandleMediaClicked()
 {
 	const EGFCMediaKind Kind = Seed.GetMediaKind();
-	if (Kind != EGFCMediaKind::Video && Kind != EGFCMediaKind::Audio)
+	if (Kind == EGFCMediaKind::Audio)
+	{
+		// Music plays in the shared player: it keeps going while the user scrolls and browses.
+		if (UGFCMusicPlayer* Music = GetGameInstance()->GetSubsystem<UGFCMusicPlayer>())
+		{
+			if (Music->IsCurrent(Seed.Id)) Music->TogglePause();
+			else Music->Play(Seed);
+		}
+		UpdateMediaControls();
+		return;
+	}
+	if (Kind != EGFCMediaKind::Video)
 	{
 		HandleClicked(); // images and 3D open the seed
 		return;

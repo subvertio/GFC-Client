@@ -24,6 +24,7 @@
 #include "UI/GFCSeedDetailScreen.h"
 #include "GFCApi.h"
 #include "UI/GFCActionSheet.h"
+#include "UI/GFCMusicWidgets.h"
 #include "UI/GFCRewardBurst.h"
 #include "Misc/CoreDelegates.h"
 #include "HAL/PlatformProcess.h"
@@ -189,6 +190,12 @@ void UGFCRootWidget::BuildDefaultLayout()
 	ScreenSwitcher = T->ConstructWidget<UWidgetSwitcher>();
 	Body->AddChild(ScreenSwitcher);
 	AddV(Col, Body, 0.f, true);
+
+	// Music keeps playing across screens: the mini player sits just above the bottom bar.
+	MiniPlayer = CreateWidget<UGFCMiniPlayer>(this, UGFCMiniPlayer::StaticClass());
+	TWeakObjectPtr<UGFCRootWidget> WeakRoot(this);
+	MiniPlayer->OnOpen = [WeakRoot](const FGFCSeed& Playing) { if (WeakRoot.IsValid()) WeakRoot->ShowSeed(Playing); };
+	AddV(Col, MiniPlayer, 0.f);
 
 	// Bottom navigation: one-handed reach.
 	AddV(Col, MakeDivider(T), 0.f);

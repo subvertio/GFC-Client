@@ -239,6 +239,20 @@ It plays:
 
 Preview it in a Development build with the console command `GFC.Celebrate [amount]`. On the phone, run
 `adb shell am broadcast -a android.intent.action.RUN -e cmd "GFC.Celebrate 1000"`.
+## Music player (`UGFCMusicPlayer`, `GFCMusicWidgets`)
+
+One audio post plays at a time and keeps playing while the user browses. Any audio the phone's media player decodes works:
+MP3, AAC/M4A, WAV, OGG/OGA, Opus, FLAC, AIFF. WMA only plays where the OS supports it (not Android).
+
+- **Post screen** (`MusicPanel`, audio posts only): the track, a seek slider with elapsed and total time, -15s, Play/Pause, +15s and Loop.
+  Dragging the slider seeks on release. Play after the end starts again from the top.
+- **Mini player** (`MiniPlayer`, above the bottom bar, shown while something plays): title, @creator, a thin progress line, Play/Pause and ×.
+  Tap the title to open the post.
+- **Feed card:** "▶ Play audio" plays in the shared player and the label reads "Now playing".
+- The track is the cache's one heavy item (owner `music`): opening a video or a 3D model, going to the background, or logging out stops it.
+  Qualified listens are reported to `/seeds/{id}/played` like video.
+- Development: `GFC.Music.Play <seed id>` and `GFC.Music.Stop` console commands.
+
 ## Wallet (`GFCWalletScreen`)
 
 One scrolling column: balance, backup prompt, send, wallets, history. The node has no "list my wallets" endpoint

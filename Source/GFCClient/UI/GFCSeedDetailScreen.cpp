@@ -33,6 +33,7 @@
 #include "Misc/FileHelper.h"
 #include "Components/Spacer.h"
 #include "UI/GFCActionSheet.h"
+#include "UI/GFCMusicWidgets.h"
 #include "UI/GFCRootWidget.h"
 #include "UI/GFCSeedCard.h"
 #include "UI/GFCUIStyle.h"
@@ -137,6 +138,9 @@ void UGFCSeedDetailScreen::BuildDefaultLayout()
 	PrimaryButton = MakeButton(T, LOCTEXT("View", "View"), Accent, &Label);
 	PrimaryLabel = Label;
 	AddV(Col, PrimaryButton, 16.f);
+	MusicPanel = CreateWidget<UGFCMusicPanel>(this, UGFCMusicPanel::StaticClass());
+	MusicPanel->SetVisibility(ESlateVisibility::Collapsed);
+	AddV(Col, MusicPanel, 16.f);
 
 	TitleText = MakeText(T, FText::GetEmpty(), 24, Text, true);
 	OwnerText = MakeText(T, FText::GetEmpty(), 14, AccentText);
@@ -267,7 +271,13 @@ void UGFCSeedDetailScreen::Render()
 	}
 	const ESlateVisibility MediaVis = Kind == EGFCMediaKind::Text ? ESlateVisibility::Collapsed : ESlateVisibility::Visible;
 	if (PreviewFrame) PreviewFrame->SetVisibility(MediaVis);
-	if (PrimaryButton) PrimaryButton->SetVisibility(MediaVis);
+	const bool bAudio = Kind == EGFCMediaKind::Audio;
+	if (PrimaryButton) PrimaryButton->SetVisibility(bAudio ? ESlateVisibility::Collapsed : MediaVis);
+	if (MusicPanel)
+	{
+		MusicPanel->SetVisibility(bAudio ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+		if (bAudio) MusicPanel->SetSeed(Seed);
+	}
 	if (MetaText)
 	{
 		const FString Tags = Seed.Tags.Num() ? FString::Join(Seed.Tags, TEXT(", ")) : FString(TEXT("none"));
@@ -512,7 +522,7 @@ void UGFCSeedDetailScreen::OnDownloaded(const FString& Path)
 		PreviewImage->SetBrushResourceObject(Media->GetVideoTexture());
 		PreviewImage->SetColorAndOpacity(FLinearColor::White);
 	}
-	SetState(EGFCDetailState::Ready, Kind == EGFCMediaKind::Audio ? LOCTEXT("PlayingAudio", "♫ Playing") : FText::GetEmpty());
+	SetState(EGFCDetailState::Ready, Kind == EGFCMediaKind::Audio ? LOCTEXT("PlayingAudio", "Playing") : FText::GetEmpty());
 }
 
 void UGFCSeedDetailScreen::ShowModel(TSharedPtr<FGFCModelData> Model)
