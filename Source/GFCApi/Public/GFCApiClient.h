@@ -98,6 +98,12 @@ public:
 	void GetSeed(const FString& SeedId, TCallback<FGFCSeed> Done);
 	void GetShareInfo(const FString& SeedId, TCallback<FGFCShareInfo> Done);
 
+	/**
+	 * Reports a qualified view (see FGFCViewTracker); the node may pay the creator.
+	 * bCredited false with a Reason is a normal outcome, not an error.
+	 */
+	void RecordPlay(const FString& SeedId, TCallback<FGFCPlayResult> Done);
+
 	/** Downloads public media (thumbnails). Never sends the token. Bodies over MaxBytes fail. */
 	void DownloadBytes(const FString& Url, int64 MaxBytes, TFunction<void(bool bOk, const TArray<uint8>& Bytes)> Done);
 

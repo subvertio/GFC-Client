@@ -4,6 +4,7 @@
 #include "Components/Border.h"
 #include "Components/Button.h"
 #include "Components/HorizontalBox.h"
+#include "Components/SafeZone.h"
 #include "Components/Spacer.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
@@ -11,6 +12,7 @@
 #include "Components/WidgetSwitcherSlot.h"
 #include "GFCApiClient.h"
 #include "GFCApiSubsystem.h"
+#include "GFCDeepLink.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "UI/GFCFeedScreen.h"
@@ -59,12 +61,20 @@ void UGFCRootWidget::NativeOnInitialized()
 	if (FeedNavButton) FeedNavButton->OnClicked.AddDynamic(this, &ThisClass::ShowFeed);
 	if (WalletNavButton) WalletNavButton->OnClicked.AddDynamic(this, &ThisClass::ShowWallet);
 	if (LogoutButton) LogoutButton->OnClicked.AddDynamic(this, &ThisClass::HandleLogout);
+	if (LoginNavButton) LoginNavButton->OnClicked.AddDynamic(this, &ThisClass::ShowLogin);
 
 	UGFCApiSubsystem* Api = GetGameInstance()->GetSubsystem<UGFCApiSubsystem>();
 	Api->OnSessionChanged.AddDynamic(this, &ThisClass::HandleSessionChanged);
+	DeepLinkHandle = FGFCDeepLink::OnSeedLink.AddUObject(this, &UGFCRootWidget::HandleDeepLink);
 
-	// A remembered session goes straight to the feed; an expired one gets bounced back on the first 401.
-	if (!Api->GetClient()->IsLoggedIn())
+	// A link that launched the app wins; then a remembered session goes to the feed.
+	FGFCDeepLink::CollectLaunchLink();
+	FString LinkedSeed;
+	if (FGFCDeepLink::TakePending(LinkedSeed))
+	{
+		OpenSeedById(LinkedSeed);
+	}
+	else if (!Api->GetClient()->IsLoggedIn())
 	{
 		ShowLogin();
 	}
@@ -75,73 +85,57 @@ void UGFCRootWidget::NativeOnInitialized()
 	ShowStatus(FText::Format(LOCTEXT("Connected", "Node: {0}"), FText::FromString(Api->GetClient()->GetBaseUrl())));
 }
 
+void UGFCRootWidget::NativeDestruct()
+{
+	FGFCDeepLink::OnSeedLink.Remove(DeepLinkHandle);
+	Super::NativeDestruct();
+}
+
 void UGFCRootWidget::BuildDefaultLayout()
 {
 	UWidgetTree* T = WidgetTree;
 
 	UBorder* Bg = MakePanel(T, Background, FMargin(0.f));
 	T->RootWidget = Bg;
+	USafeZone* Safe = T->ConstructWidget<USafeZone>(); // notches, status bar, gesture bar
+	Bg->AddChild(Safe);
 	UVerticalBox* Col = MakeColumn(T);
-	Bg->AddChild(Col);
+	Safe->AddChild(Col);
 
-	// Top bar
-	UBorder* Bar = MakePanel(T, Panel, FMargin(20.f, 10.f));
+	// Top bar: brand on the left, account on the right.
+	UBorder* Bar = MakePanel(T, Panel, FMargin(16.f, 6.f));
 	UHorizontalBox* BarRow = MakeRow(T);
 	Bar->AddChild(BarRow);
-	AddH(BarRow, MakeText(T, LOCTEXT("Brand", "GFC"), 22, Accent, true), 24.f);
-
-	UHorizontalBox* Nav = MakeRow(T);
-	FeedNavButton = MakeButton(T, LOCTEXT("Feed", "Feed"), PanelRaised);
-	WalletNavButton = MakeButton(T, LOCTEXT("Wallet", "Wallet"), PanelRaised);
-	AddH(Nav, FeedNavButton);
-	AddH(Nav, WalletNavButton);
-	NavBar = Nav;
-	AddH(BarRow, Nav, 0.f);
-	AddH(BarRow, T->ConstructWidget<USpacer>(), 0.f, true);
-
-	UserText = MakeText(T, FText::GetEmpty(), 13, TextDim);
+	AddH(BarRow, MakeText(T, LOCTEXT("Brand", "GFC"), 22, Accent, true), 12.f);
+	UserText = MakeText(T, FText::GetEmpty(), 12, TextDim);
 	UserText->SetAutoWrapText(false);
-	AddH(BarRow, UserText, 12.f);
+	AddH(BarRow, UserText, 8.f, true);
 	LogoutButton = MakeButton(T, LOCTEXT("Logout", "Log out"), PanelRaised);
+	LoginNavButton = MakeButton(T, LOCTEXT("Login", "Log in"));
 	AddH(BarRow, LogoutButton, 0.f);
+	AddH(BarRow, LoginNavButton, 0.f);
 	AddV(Col, Bar, 0.f);
 
-	// Status line
-	UBorder* StatusBar = MakePanel(T, Background, FMargin(20.f, 6.f));
+	UBorder* StatusBar = MakePanel(T, Background, FMargin(16.f, 6.f));
 	StatusText = MakeText(T, FText::GetEmpty(), 12, TextDim);
 	StatusBar->AddChild(StatusText);
 	AddV(Col, StatusBar, 0.f);
 
-	// Screens
-	UBorder* Body = MakePanel(T, Background, FMargin(20.f, 8.f, 20.f, 20.f));
+	UBorder* Body = MakePanel(T, Background, FMargin(12.f, 0.f, 12.f, 8.f));
 	ScreenSwitcher = T->ConstructWidget<UWidgetSwitcher>();
 	Body->AddChild(ScreenSwitcher);
 	AddV(Col, Body, 0.f, true);
-}
 
-void UGFCRootWidget::Activate(UGFCScreenBase* Screen)
-{
-	if (!Screen)
-	{
-		return;
-	}
-	ScreenSwitcher->SetActiveWidget(Screen);
-	RefreshNav();
-	Screen->OnScreenShown();
-}
-
-void UGFCRootWidget::RefreshNav()
-{
-	const UGFCApiClient* C = GetGameInstance()->GetSubsystem<UGFCApiSubsystem>()->GetClient();
-	const bool bIn = C->IsLoggedIn();
-	const ESlateVisibility Vis = bIn ? ESlateVisibility::Visible : ESlateVisibility::Collapsed;
-	if (NavBar) NavBar->SetVisibility(Vis);
-	if (LogoutButton) LogoutButton->SetVisibility(Vis);
-	if (UserText)
-	{
-		UserText->SetVisibility(Vis);
-		UserText->SetText(FText::Format(LOCTEXT("SignedInAs", "Signed in as {0}"), FText::FromString(C->GetUsername())));
-	}
+	// Bottom navigation: one-handed reach.
+	UBorder* NavBg = MakePanel(T, Panel, FMargin(12.f, 8.f));
+	UHorizontalBox* Nav = MakeRow(T);
+	NavBg->AddChild(Nav);
+	FeedNavButton = MakeButton(T, LOCTEXT("Feed", "Feed"), PanelRaised);
+	WalletNavButton = MakeButton(T, LOCTEXT("Wallet", "Wallet"), PanelRaised);
+	AddH(Nav, FeedNavButton, 8.f, true);
+	AddH(Nav, WalletNavButton, 0.f, true);
+	NavBar = NavBg;
+	AddV(Col, NavBg, 0.f);
 }
 
 bool UGFCRootWidget::OpenStartScreenFromCommandLine()
@@ -158,24 +152,51 @@ bool UGFCRootWidget::OpenStartScreenFromCommandLine()
 		return true;
 	}
 	FString SeedId;
-	if (Screen.Split(TEXT(":"), nullptr, &SeedId) && !SeedId.IsEmpty())
+	if (Screen.Split(TEXT(":"), nullptr, &SeedId) && FGFCDeepLink::IsValidSeedId(SeedId))
 	{
-		TWeakObjectPtr<UGFCRootWidget> WeakThis(this);
-		GetGameInstance()->GetSubsystem<UGFCApiSubsystem>()->GetClient()->GetSeed(SeedId,
-			[WeakThis](const FGFCApiResult& R, const FGFCSeed& Seed)
-			{
-				if (WeakThis.IsValid() && R.bOk)
-				{
-					WeakThis->ShowSeed(Seed);
-				}
-			});
-		ShowFeed();
+		OpenSeedById(SeedId);
 		return true;
 	}
 	return false;
 }
 
-void UGFCRootWidget::ShowLogin() { Activate(LoginScreen); }
+void UGFCRootWidget::Activate(UGFCScreenBase* Screen)
+{
+	if (!Screen)
+	{
+		return;
+	}
+	if (ActiveScreen && ActiveScreen != Screen)
+	{
+		ActiveScreen->OnScreenHidden(); // frees heavy content (models, media)
+	}
+	ActiveScreen = Screen;
+	ScreenSwitcher->SetActiveWidget(Screen);
+	RefreshNav();
+	Screen->OnScreenShown();
+}
+
+void UGFCRootWidget::RefreshNav()
+{
+	const UGFCApiClient* C = GetGameInstance()->GetSubsystem<UGFCApiSubsystem>()->GetClient();
+	const bool bIn = C->IsLoggedIn();
+	const bool bOnLogin = ActiveScreen == LoginScreen;
+	if (NavBar) NavBar->SetVisibility(bIn ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	if (LogoutButton) LogoutButton->SetVisibility(bIn ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	if (LoginNavButton) LoginNavButton->SetVisibility(!bIn && !bOnLogin ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	if (UserText)
+	{
+		UserText->SetText(bIn ? FText::FromString(C->GetUsername()) : FText::GetEmpty());
+	}
+}
+
+void UGFCRootWidget::ShowLogin()
+{
+	// From a shared seed: come back to it after logging in.
+	bReturnToSeed = ActiveScreen == SeedDetailScreen && SeedDetailScreen && !SeedDetailScreen->GetSeed().Id.IsEmpty();
+	Activate(LoginScreen);
+}
+
 void UGFCRootWidget::ShowFeed() { Activate(FeedScreen); }
 void UGFCRootWidget::ShowWallet() { Activate(WalletScreen); }
 
@@ -183,9 +204,57 @@ void UGFCRootWidget::ShowSeed(const FGFCSeed& Seed)
 {
 	if (SeedDetailScreen)
 	{
+		if (ActiveScreen == SeedDetailScreen)
+		{
+			SeedDetailScreen->OnScreenHidden(); // release the previous seed first
+		}
 		SeedDetailScreen->SetSeed(Seed);
 		Activate(SeedDetailScreen);
 	}
+}
+
+void UGFCRootWidget::OpenSeedById(const FString& SeedId)
+{
+	ShowStatus(LOCTEXT("Opening", "Opening the shared seed…"));
+	TWeakObjectPtr<UGFCRootWidget> WeakThis(this);
+	GetGameInstance()->GetSubsystem<UGFCApiSubsystem>()->GetClient()->GetSeed(SeedId,
+		[WeakThis](const FGFCApiResult& R, const FGFCSeed& Seed)
+		{
+			if (!WeakThis.IsValid())
+			{
+				return;
+			}
+			if (R.bOk)
+			{
+				WeakThis->ShowStatus(FText::GetEmpty());
+				WeakThis->ShowSeed(Seed);
+				return;
+			}
+			WeakThis->ShowStatus(R.StatusCode == 404
+				? LOCTEXT("NoSeed", "That seed isn't on this node (yet). It may still be syncing.")
+				: FText::FromString(R.Error), true);
+			if (!WeakThis->ActiveScreen)
+			{
+				WeakThis->GoBack();
+			}
+		});
+}
+
+void UGFCRootWidget::GoBack()
+{
+	if (GetGameInstance()->GetSubsystem<UGFCApiSubsystem>()->GetClient()->IsLoggedIn())
+	{
+		ShowFeed();
+	}
+	else
+	{
+		ShowLogin();
+	}
+}
+
+void UGFCRootWidget::HandleDeepLink(const FString& SeedId)
+{
+	OpenSeedById(SeedId);
 }
 
 void UGFCRootWidget::ShowStatus(const FText& Message, bool bError)
@@ -199,6 +268,12 @@ void UGFCRootWidget::ShowStatus(const FText& Message, bool bError)
 
 void UGFCRootWidget::OnLoggedIn(bool bNewAccount)
 {
+	if (bReturnToSeed)
+	{
+		bReturnToSeed = false;
+		ShowSeed(SeedDetailScreen->GetSeed());
+		return;
+	}
 	if (bNewAccount)
 	{
 		ShowWallet();
@@ -217,7 +292,7 @@ void UGFCRootWidget::HandleLogout()
 	{
 		if (WeakThis.IsValid())
 		{
-			WeakThis->ShowStatus(LOCTEXT("LoggedOut", "Logged out."));
+			WeakThis->ShowStatus(LOCTEXT("LoggedOut", "Logged out. Downloaded content was deleted."));
 		}
 	});
 }
@@ -225,7 +300,7 @@ void UGFCRootWidget::HandleLogout()
 void UGFCRootWidget::HandleSessionChanged()
 {
 	const bool bIn = GetGameInstance()->GetSubsystem<UGFCApiSubsystem>()->GetClient()->IsLoggedIn();
-	if (!bIn && ScreenSwitcher->GetActiveWidget() != LoginScreen)
+	if (!bIn && ActiveScreen != LoginScreen && ActiveScreen != SeedDetailScreen)
 	{
 		ShowLogin();
 	}

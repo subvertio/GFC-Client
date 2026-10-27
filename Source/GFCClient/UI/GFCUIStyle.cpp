@@ -7,6 +7,7 @@
 #include "Components/EditableTextBox.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
+#include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
@@ -30,13 +31,16 @@ namespace GFCUI
 	{
 		UButton* B = Tree->ConstructWidget<UButton>();
 		B->SetBackgroundColor(Color);
-		UTextBlock* T = MakeText(Tree, Label, 14, FLinearColor::White, true);
+		// Touch: a drag that starts on a button scrolls its list instead of clicking.
+		B->SetTouchMethod(EButtonTouchMethod::PreciseTap);
+		B->SetClickMethod(EButtonClickMethod::PreciseClick);
+		UTextBlock* T = MakeText(Tree, Label, 15, FLinearColor::White, true);
 		T->SetAutoWrapText(false);
 		T->SetJustification(ETextJustify::Center);
 		B->AddChild(T);
 		if (UButtonSlot* S = Cast<UButtonSlot>(T->Slot))
 		{
-			S->SetPadding(FMargin(14.f, 6.f));
+			S->SetPadding(FMargin(16.f, 13.f)); // >= 48 dp tall with the label
 			S->SetHorizontalAlignment(HAlign_Center);
 			S->SetVerticalAlignment(VAlign_Center);
 		}
@@ -52,6 +56,12 @@ namespace GFCUI
 		UEditableTextBox* E = Tree->ConstructWidget<UEditableTextBox>();
 		E->SetHintText(Hint);
 		E->SetIsPassword(bPassword);
+		FEditableTextBoxStyle Style = E->GetWidgetStyle();
+		FSlateFontInfo Font = Style.TextStyle.Font;
+		Font.Size = 16;
+		Style.SetFont(Font);
+		Style.SetPadding(FMargin(12.f, 12.f));
+		E->SetWidgetStyle(Style);
 		return E;
 	}
 
@@ -100,6 +110,14 @@ namespace GFCUI
 		AddV(Col, MakeText(Tree, Label, 11, TextDim), 2.f);
 		AddV(Col, Input, 0.f);
 		return Col;
+	}
+
+	USizeBox* MinHeight(UWidgetTree* Tree, UWidget* Child, float Height)
+	{
+		USizeBox* Box = Tree->ConstructWidget<USizeBox>();
+		Box->SetMinDesiredHeight(Height);
+		Box->AddChild(Child);
+		return Box;
 	}
 
 	FString ShortId(const FString& Id)

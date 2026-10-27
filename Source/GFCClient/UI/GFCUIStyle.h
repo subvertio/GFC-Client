@@ -8,6 +8,7 @@ class UButton;
 class UEditableTextBox;
 class UHorizontalBox;
 class UPanelWidget;
+class USizeBox;
 class UTextBlock;
 class UVerticalBox;
 class UWidget;
@@ -44,6 +45,9 @@ namespace GFCUI
 
 	/** A labelled input: "Label" above the box. */
 	UVerticalBox* MakeField(UWidgetTree* Tree, const FText& Label, UEditableTextBox* Input);
+
+	/** Wraps a widget so it is at least Height dp tall (touch targets). */
+	USizeBox* MinHeight(UWidgetTree* Tree, UWidget* Child, float Height = 48.f);
 
 	/** Shortens a wallet id or hash for display: "abcd1234…9f0e". */
 	FString ShortId(const FString& Id);

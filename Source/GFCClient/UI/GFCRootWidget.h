@@ -11,15 +11,17 @@ class UGFCLoginScreen;
 class UGFCScreenBase;
 class UGFCSeedDetailScreen;
 class UGFCWalletScreen;
-class UNamedSlot;
 class UTextBlock;
 class UWidget;
 class UWidgetSwitcher;
 
 /**
- * App shell: top bar, status line and a switcher holding one instance of each
- * screen. Screen classes are configurable so Blueprint screens can replace the
+ * App shell (portrait, phone-first): safe-area aware, a slim top bar, one status
+ * line, the active screen, and a bottom navigation bar within thumb reach.
+ * Screen classes are configurable so Blueprint screens can replace the
  * code-built ones without touching C++. See docs/ui-spec.md.
+ *
+ * Also routes deep links (FGFCDeepLink) to the seed detail screen, logged in or not.
  */
 UCLASS()
 class GFCCLIENT_API UGFCRootWidget : public UUserWidget
@@ -39,6 +41,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "GFC|Navigation") void ShowWallet();
 	UFUNCTION(BlueprintCallable, Category = "GFC|Navigation") void ShowSeed(const FGFCSeed& Seed);
 
+	/** Opens a seed by id (deep links). Works without logging in: seeds are public. */
+	UFUNCTION(BlueprintCallable, Category = "GFC|Navigation") void OpenSeedById(const FString& SeedId);
+
+	/** Back from a seed: the feed when logged in, otherwise login. */
+	UFUNCTION(BlueprintCallable, Category = "GFC|Navigation") void GoBack();
+
 	/** One line under the top bar for progress and errors. */
 	UFUNCTION(BlueprintCallable, Category = "GFC") void ShowStatus(const FText& Message, bool bError = false);
 
@@ -47,6 +55,7 @@ public:
 
 protected:
 	virtual void NativeOnInitialized() override;
+	virtual void NativeDestruct() override;
 
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidget)) TObjectPtr<UWidgetSwitcher> ScreenSwitcher;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidget)) TObjectPtr<UTextBlock> StatusText;
@@ -54,6 +63,7 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> FeedNavButton;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> WalletNavButton;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> LogoutButton;
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> LoginNavButton;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> UserText;
 
 private:
@@ -61,6 +71,7 @@ private:
 	bool OpenStartScreenFromCommandLine();
 	void Activate(UGFCScreenBase* Screen);
 	void RefreshNav();
+	void HandleDeepLink(const FString& SeedId);
 
 	UFUNCTION() void HandleLogout();
 	UFUNCTION() void HandleSessionChanged();
@@ -69,4 +80,8 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UGFCFeedScreen> FeedScreen;
 	UPROPERTY(Transient) TObjectPtr<UGFCWalletScreen> WalletScreen;
 	UPROPERTY(Transient) TObjectPtr<UGFCSeedDetailScreen> SeedDetailScreen;
+	UPROPERTY(Transient) TObjectPtr<UGFCScreenBase> ActiveScreen;
+
+	FDelegateHandle DeepLinkHandle;
+	bool bReturnToSeed = false;
 };

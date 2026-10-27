@@ -358,6 +358,12 @@ void UGFCApiClient::GetShareInfo(const FString& SeedId, TCallback<FGFCShareInfo>
 		&FGFCJson::ParseShareInfo, MoveTemp(Done));
 }
 
+void UGFCApiClient::RecordPlay(const FString& SeedId, TCallback<FGFCPlayResult> Done)
+{
+	Call<FGFCPlayResult>(TEXT("POST"), TEXT("/seeds/") + FGFCUrl::Encode(SeedId) + TEXT("/played"), FormContentType, FString(), true,
+		&FGFCJson::ParsePlayResult, MoveTemp(Done));
+}
+
 void UGFCApiClient::DownloadBytes(const FString& Url, int64 MaxBytes, TFunction<void(bool, const TArray<uint8>&)> Done)
 {
 	const TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();

@@ -2,7 +2,7 @@
 
 #include "Modules/ModuleManager.h"
 
-DECLARE_LOG_CATEGORY_EXTERN(LogGFCApi, Log, All);
+GFCAPI_API DECLARE_LOG_CATEGORY_EXTERN(LogGFCApi, Log, All);
 
 class FGFCApiModule : public IModuleInterface
 {

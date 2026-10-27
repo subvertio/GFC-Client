@@ -26,6 +26,7 @@ struct GFCAPI_API FGFCJson
 	static bool ParseShareInfo(const FString& Body, FGFCShareInfo& Out);
 	/** GET /auth/tokens: the id of the token marked current, for logging out. */
 	static bool ParseCurrentTokenId(const FString& Body, FString& OutId);
+	static bool ParsePlayResult(const FString& Body, FGFCPlayResult& Out);
 
 	static void ReadSeed(const TSharedPtr<FJsonObject>& Obj, FGFCSeed& Out);
 	static void ReadTransaction(const TSharedPtr<FJsonObject>& Obj, FGFCTransaction& Out);

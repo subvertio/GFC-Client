@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  GFC Android glue (Unreal Plugin Language), registered by GFCApi.Build.cs.
+
+  - App Links: https://node.galacticfederation.tech/p/{id} opens the app (autoVerify,
+    checked against /.well-known/assetlinks.json on that host). The host must match the
+    first entry of AppLinkHosts in Config/DefaultGame.ini.
+  - Custom scheme fallback: gfc://seed/{id} (the target of the share page's intent:// link).
+  - Hands links to C++ (FGFCDeepLink) on cold start and in onNewIntent.
+  - Exposes the app's private cache folder (Context.getCacheDir) to the cache subsystem.
+
+  Not yet built on a device: Android tooling isn't installed on the dev machine yet.
+-->
+<root xmlns:android="http://schemas.android.com/apk/res/android">
+	<init>
+		<log text="GFC: adding App Links and deep-link handling"/>
+	</init>
+
+	<androidManifestUpdates>
+		<addElements tag="activity" name="com.epicgames.unreal.GameActivity">
+			<intent-filter android:autoVerify="true">
+				<action android:name="android.intent.action.VIEW"/>
+				<category android:name="android.intent.category.DEFAULT"/>
+				<category android:name="android.intent.category.BROWSABLE"/>
+				<data android:scheme="https"/>
+				<data android:host="node.galacticfederation.tech"/>
+				<data android:pathPrefix="/p/"/>
+			</intent-filter>
+			<intent-filter>
+				<action android:name="android.intent.action.VIEW"/>
+				<category android:name="android.intent.category.DEFAULT"/>
+				<category android:name="android.intent.category.BROWSABLE"/>
+				<data android:scheme="gfc" android:host="seed"/>
+			</intent-filter>
+		</addElements>
+		<!-- A link tapped while the app runs must reach onNewIntent, not start a second copy. -->
+		<loopElements tag="activity">
+			<setStringFromAttribute result="activityName" tag="$" name="android:name"/>
+			<setBoolIsEqual result="bGameActivity" arg1="$S(activityName)" arg2="com.epicgames.unreal.GameActivity"/>
+			<if condition="bGameActivity">
+				<true>
+					<addAttribute tag="$" name="android:launchMode" value="singleTask"/>
+				</true>
+			</if>
+		</loopElements>
+	</androidManifestUpdates>
+
+	<gameActivityClassAdditions>
+		<insert>
+	// ---- GFC deep links ----
+	private static String gfcPendingLink = null;
+	public native void nativeGFCOnDeepLink(String url);
+
+	private void gfcHandleIntent(android.content.Intent intent, boolean bNativeReady)
+	{
+		if (intent == null || !android.content.Intent.ACTION_VIEW.equals(intent.getAction()) || intent.getDataString() == null)
+		{
+			return;
+		}
+		String url = intent.getDataString();
+		if (bNativeReady)
+		{
+			try { nativeGFCOnDeepLink(url); return; }
+			catch (UnsatisfiedLinkError e) { }
+		}
+		gfcPendingLink = url;
+	}
+
+	/** Called from C++ at startup for the link that launched the app. */
+	public String AndroidThunkJava_GFCTakePendingLink()
+	{
+		String url = gfcPendingLink;
+		gfcPendingLink = null;
+		return url;
+	}
+
+	/** The app's private cache folder; the OS may clear it when storage runs low. */
+	public String AndroidThunkJava_GFCGetCacheDir()
+	{
+		java.io.File dir = getCacheDir();
+		return dir != null ? dir.getAbsolutePath() : "";
+	}
+		</insert>
+	</gameActivityClassAdditions>
+
+	<gameActivityOnCreateAdditions>
+		<insert>
+		gfcHandleIntent(getIntent(), false);
+		</insert>
+	</gameActivityOnCreateAdditions>
+
+	<gameActivityOnNewIntentAdditions>
+		<insert>
+		setIntent(newIntent);
+		gfcHandleIntent(newIntent, true);
+		</insert>
+	</gameActivityOnNewIntentAdditions>
+</root>

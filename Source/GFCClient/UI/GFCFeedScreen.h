@@ -28,7 +28,10 @@ public:
 
 	UGFCFeedScreen(const FObjectInitializer& ObjectInitializer);
 
+	virtual void OnScreenHidden() override;
+
 protected:
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 	virtual void BuildDefaultLayout() override;
 	virtual void BindEvents() override;
 
@@ -41,5 +44,9 @@ private:
 	UFUNCTION() void HandleRefresh();
 	void Populate(const TArray<FGFCSeed>& Seeds);
 
+	/** Releases cards that have been off screen longer than the grace period; restores cards coming back. */
+	void UpdateCardVisibility(float DeltaTime);
+
 	bool bLoading = false;
+	TMap<TWeakObjectPtr<UGFCSeedCard>, float> OffscreenSeconds;
 };

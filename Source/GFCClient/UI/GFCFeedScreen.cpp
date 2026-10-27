@@ -9,6 +9,8 @@
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "GFCApiClient.h"
+#include "GFCApiSettings.h"
+#include "GFCCacheSubsystem.h"
 #include "UI/GFCRootWidget.h"
 #include "UI/GFCSeedCard.h"
 #include "UI/GFCUIStyle.h"
@@ -52,6 +54,84 @@ void UGFCFeedScreen::OnScreenShown()
 {
 	Refresh();
 	Super::OnScreenShown();
+}
+
+void UGFCFeedScreen::OnScreenHidden()
+{
+	// Leaving the feed: every card lets go of its content.
+	if (SeedList)
+	{
+		for (UWidget* W : SeedList->GetAllChildren())
+		{
+			if (UGFCSeedCard* Card = Cast<UGFCSeedCard>(W))
+			{
+				Card->ReleaseContent();
+			}
+		}
+	}
+	OffscreenSeconds.Reset();
+	if (UGFCCacheSubsystem* Cache = GetGameInstance()->GetSubsystem<UGFCCacheSubsystem>())
+	{
+		Cache->SetVisibleThumbnails({});
+	}
+}
+
+void UGFCFeedScreen::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
+	UpdateCardVisibility(InDeltaTime);
+}
+
+void UGFCFeedScreen::UpdateCardVisibility(float DeltaTime)
+{
+	if (!SeedList || !IsVisible())
+	{
+		return;
+	}
+	const FGeometry& ListGeo = SeedList->GetCachedGeometry();
+	const FVector2D ListTop = ListGeo.GetAbsolutePosition();
+	const FVector2D ListSize = ListGeo.GetAbsoluteSize();
+	if (ListSize.Y <= 0.0)
+	{
+		return; // not laid out yet
+	}
+	// A margin of a quarter screen above and below: cards about to scroll in are ready.
+	const double Margin = ListSize.Y * 0.25;
+	const double Top = ListTop.Y - Margin, Bottom = ListTop.Y + ListSize.Y + Margin;
+	const float Grace = GetDefault<UGFCApiSettings>()->OffscreenGraceSeconds;
+
+	TSet<FString> VisibleThumbs;
+	for (UWidget* W : SeedList->GetAllChildren())
+	{
+		UGFCSeedCard* Card = Cast<UGFCSeedCard>(W);
+		if (!Card)
+		{
+			continue;
+		}
+		const FGeometry& G = Card->GetCachedGeometry();
+		const double CardTop = G.GetAbsolutePosition().Y, CardBottom = CardTop + G.GetAbsoluteSize().Y;
+		const bool bOnScreen = G.GetAbsoluteSize().Y > 0.0 && CardBottom > Top && CardTop < Bottom;
+		if (bOnScreen)
+		{
+			OffscreenSeconds.Remove(Card);
+			Card->RestoreContent();
+			VisibleThumbs.Add(Card->ThumbUrl());
+		}
+		else if (Card->IsContentLoaded())
+		{
+			float& Secs = OffscreenSeconds.FindOrAdd(Card);
+			Secs += DeltaTime;
+			if (Secs >= Grace)
+			{
+				Card->ReleaseContent(); // scrolled away: deleted, re-fetched if the user comes back
+				OffscreenSeconds.Remove(Card);
+			}
+		}
+	}
+	if (UGFCCacheSubsystem* Cache = GetGameInstance()->GetSubsystem<UGFCCacheSubsystem>())
+	{
+		Cache->SetVisibleThumbnails(VisibleThumbs);
+	}
 }
 
 void UGFCFeedScreen::HandleRefresh()
@@ -98,7 +178,15 @@ void UGFCFeedScreen::Populate(const TArray<FGFCSeed>& Seeds)
 	{
 		return;
 	}
+	for (UWidget* W : SeedList->GetAllChildren())
+	{
+		if (UGFCSeedCard* Old = Cast<UGFCSeedCard>(W))
+		{
+			Old->ReleaseContent();
+		}
+	}
 	SeedList->ClearChildren();
+	OffscreenSeconds.Reset();
 	TWeakObjectPtr<UGFCFeedScreen> WeakThis(this);
 	for (const FGFCSeed& Seed : Seeds)
 	{
@@ -117,7 +205,7 @@ void UGFCFeedScreen::Populate(const TArray<FGFCSeed>& Seeds)
 		UPanelSlot* PanelSlot = SeedList->AddChild(Card);
 		if (UScrollBoxSlot* S = Cast<UScrollBoxSlot>(PanelSlot))
 		{
-			S->SetPadding(FMargin(0.f, 0.f, 0.f, 8.f));
+			S->SetPadding(FMargin(0.f, 0.f, 0.f, 12.f));
 		}
 		Card->SetSeed(Seed);
 	}

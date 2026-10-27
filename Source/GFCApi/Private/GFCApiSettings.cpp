@@ -6,12 +6,13 @@
 #include "Misc/Parse.h"
 
 const TCHAR* UGFCApiSettings::DefaultNodeBaseUrl = TEXT("https://node.galacticfederation.tech");
-const TCHAR* UGFCApiSettings::DefaultShareBaseUrl = TEXT("https://galacticfederation.tech");
+const TCHAR* UGFCApiSettings::DefaultShareBaseUrl = TEXT("https://node.galacticfederation.tech");
 
 UGFCApiSettings::UGFCApiSettings()
 {
 	NodeBaseUrl = DefaultNodeBaseUrl;
 	ShareBaseUrl = DefaultShareBaseUrl;
+	AppLinkHosts = {TEXT("node.galacticfederation.tech"), TEXT("galacticfederation.tech"), TEXT("www.galacticfederation.tech")};
 }
 
 FString UGFCApiSettings::GetEffectiveNodeBaseUrl()

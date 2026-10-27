@@ -27,6 +27,9 @@ public:
 	/** Called each time the screen becomes the active one. */
 	virtual void OnScreenShown();
 
+	/** Called when another screen replaces this one: release anything heavy. */
+	virtual void OnScreenHidden() {}
+
 protected:
 	virtual void NativeOnInitialized() override;
 

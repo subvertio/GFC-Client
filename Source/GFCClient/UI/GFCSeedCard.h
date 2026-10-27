@@ -25,6 +25,16 @@ public:
 	UFUNCTION(BlueprintPure, Category = "GFC")
 	const FGFCSeed& GetSeed() const { return Seed; }
 
+	/** Scrolled out of view: let go of the thumbnail and anything the card owns in the cache. */
+	void ReleaseContent();
+	/** Back in view: show the thumbnail again (from memory if still cached, else re-fetched). */
+	void RestoreContent();
+	bool IsContentLoaded() const { return bContentLoaded; }
+
+	/** The cache owner key for this card: "card:<seed id>". */
+	FString OwnerKey() const { return TEXT("card:") + Seed.Id; }
+	FString ThumbUrl() const;
+
 protected:
 	virtual void NativeOnInitialized() override;
 
@@ -41,6 +51,7 @@ private:
 	UFUNCTION() void HandleClicked();
 
 	FGFCSeed Seed;
+	bool bContentLoaded = false;
 };
 
 /** Short label for a media kind ("3D model", "Image", ...). */

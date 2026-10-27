@@ -5,8 +5,7 @@
 #include "Components/Button.h"
 #include "Components/EditableTextBox.h"
 #include "Components/HorizontalBox.h"
-#include "Components/Overlay.h"
-#include "Components/OverlaySlot.h"
+#include "Components/ScrollBox.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
@@ -23,51 +22,43 @@ void UGFCLoginScreen::BuildDefaultLayout()
 {
 	UWidgetTree* T = WidgetTree;
 
-	UOverlay* Center = T->ConstructWidget<UOverlay>();
-	T->RootWidget = Center;
+	// Portrait, one column, scrolls when the on-screen keyboard is up.
+	UScrollBox* Scroll = T->ConstructWidget<UScrollBox>();
+	T->RootWidget = Scroll;
 	USizeBox* Size = T->ConstructWidget<USizeBox>();
-	Size->SetWidthOverride(480.f);
-	if (UOverlaySlot* S = Center->AddChildToOverlay(Size))
-	{
-		S->SetHorizontalAlignment(HAlign_Center);
-		S->SetVerticalAlignment(VAlign_Top);
-		S->SetPadding(FMargin(0.f, 40.f, 0.f, 0.f));
-	}
+	Size->SetMaxDesiredWidth(520.f);
+	Scroll->AddChild(Size);
 
-	UBorder* Card = MakePanel(T, Panel, FMargin(28.f));
+	UBorder* Card = MakePanel(T, Panel, FMargin(20.f));
 	Size->AddChild(Card);
 	UVerticalBox* Col = MakeColumn(T);
 	Card->AddChild(Col);
 
 	AddV(Col, MakeText(T, LOCTEXT("Title", "Galactic Federation Coin"), 24, Text, true), 4.f);
-	AddV(Col, MakeText(T, LOCTEXT("Subtitle", "Log in or create an account to see the feed and your wallet."), 12, TextDim), 18.f);
+	AddV(Col, MakeText(T, LOCTEXT("Subtitle", "Log in or create an account to see the feed and your wallet."), 13, TextDim), 18.f);
 
 	UsernameBox = MakeInput(T, LOCTEXT("UserHint", "username"));
 	PasswordBox = MakeInput(T, LOCTEXT("PassHint", "password"), true);
-	EmailBox = MakeInput(T, LOCTEXT("EmailHint", "e-mail (optional, for registering)"));
-	AddV(Col, MakeField(T, LOCTEXT("User", "Username"), UsernameBox), 10.f);
-	AddV(Col, MakeField(T, LOCTEXT("Pass", "Password"), PasswordBox), 10.f);
-	AddV(Col, MakeField(T, LOCTEXT("Email", "E-mail"), EmailBox), 16.f);
+	EmailBox = MakeInput(T, LOCTEXT("EmailHint", "e-mail (optional)"));
+	AddV(Col, MakeField(T, LOCTEXT("User", "Username"), UsernameBox), 12.f);
+	AddV(Col, MakeField(T, LOCTEXT("Pass", "Password"), PasswordBox), 12.f);
+	AddV(Col, MakeField(T, LOCTEXT("Email", "E-mail, for new accounts"), EmailBox), 18.f);
 
-	UHorizontalBox* Buttons = MakeRow(T);
 	LoginButton = MakeButton(T, LOCTEXT("Login", "Log in"));
 	RegisterButton = MakeButton(T, LOCTEXT("Register", "Create account"), PanelRaised);
-	AddH(Buttons, LoginButton, 8.f, true);
-	AddH(Buttons, RegisterButton, 0.f, true);
-	AddV(Col, Buttons, 18.f);
+	AddV(Col, LoginButton, 10.f);
+	AddV(Col, RegisterButton, 18.f);
 
 	AddV(Col, MakeText(T, LOCTEXT("PasswordWarning",
 		"Your password also unlocks your wallet keys on the node. There is no reset: back up your wallet after you create it."),
-		11, Warning), 18.f);
+		12, Warning), 22.f);
 
 	NodeText = MakeText(T, FText::GetEmpty(), 11, TextDim);
 	AddV(Col, NodeText, 4.f);
-	UHorizontalBox* NodeRow = MakeRow(T);
 	NodeUrlBox = MakeInput(T, LOCTEXT("NodeHint", "https://node.galacticfederation.tech"));
-	UseNodeButton = MakeButton(T, LOCTEXT("UseNode", "Use node"), PanelRaised);
-	AddH(NodeRow, NodeUrlBox, 8.f, true);
-	AddH(NodeRow, UseNodeButton, 0.f);
-	AddV(Col, NodeRow, 0.f);
+	UseNodeButton = MakeButton(T, LOCTEXT("UseNode", "Use this node"), PanelRaised);
+	AddV(Col, NodeUrlBox, 8.f);
+	AddV(Col, UseNodeButton, 0.f);
 }
 
 void UGFCLoginScreen::BindEvents()

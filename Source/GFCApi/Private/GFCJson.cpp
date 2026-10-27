@@ -302,6 +302,19 @@ bool FGFCJson::ParseCurrentTokenId(const FString& Body, FString& OutId)
 	return false;
 }
 
+bool FGFCJson::ParsePlayResult(const FString& Body, FGFCPlayResult& Out)
+{
+	const TSharedPtr<FJsonObject> Obj = ParseObject(Body);
+	if (!Obj.IsValid() || !Obj->HasField(TEXT("credited")))
+	{
+		return false;
+	}
+	Out.bCredited = Bool(Obj, TEXT("credited"));
+	Out.Amount = Num(Obj, TEXT("amount"));
+	Out.Reason = Str(Obj, TEXT("reason"));
+	return true;
+}
+
 FString FGFCJson::ErrorMessage(int32 StatusCode, const FString& Body)
 {
 	if (StatusCode == 0)

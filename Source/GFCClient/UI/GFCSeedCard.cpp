@@ -6,12 +6,13 @@
 #include "Components/ButtonSlot.h"
 #include "Components/HorizontalBox.h"
 #include "Components/Image.h"
+#include "Components/ScaleBox.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "GFCApiClient.h"
 #include "GFCApiSubsystem.h"
-#include "UI/GFCImageCache.h"
+#include "GFCCacheSubsystem.h"
 #include "UI/GFCUIStyle.h"
 
 #define LOCTEXT_NAMESPACE "GFCSeedCard"
@@ -48,19 +49,20 @@ void GFCLoadImageInto(UUserWidget* Owner, UImage* Image, const FString& Url)
 	}
 	Wanted.Add(Image, Url);
 
+	Image->SetBrushResourceObject(nullptr);
 	Image->SetColorAndOpacity(FLinearColor(1.f, 1.f, 1.f, 0.f)); // hidden until loaded
-	UGFCImageCache* Cache = Owner->GetGameInstance() ? Owner->GetGameInstance()->GetSubsystem<UGFCImageCache>() : nullptr;
+	UGFCCacheSubsystem* Cache = Owner->GetGameInstance() ? Owner->GetGameInstance()->GetSubsystem<UGFCCacheSubsystem>() : nullptr;
 	if (!Cache || Url.IsEmpty())
 	{
 		return;
 	}
 	TWeakObjectPtr<UImage> WeakImage(Image);
-	Cache->Request(Url, [WeakImage, Url](UTexture2D* Tex)
+	Cache->RequestThumbnail(Url, [WeakImage, Url](UTexture2D* Tex)
 	{
 		const FString* Expected = Wanted.Find(WeakImage);
 		if (WeakImage.IsValid() && Tex && Expected && *Expected == Url)
 		{
-			WeakImage->SetBrushFromTexture(Tex);
+			WeakImage->SetBrushFromTexture(Tex, true);
 			WeakImage->SetColorAndOpacity(FLinearColor::White);
 		}
 	});
@@ -85,35 +87,45 @@ void UGFCSeedCard::BuildDefaultLayout()
 
 	CardButton = T->ConstructWidget<UButton>();
 	CardButton->SetBackgroundColor(PanelRaised);
+	CardButton->SetTouchMethod(EButtonTouchMethod::PreciseTap); // swipes scroll the feed
+	CardButton->SetClickMethod(EButtonClickMethod::PreciseClick);
 	T->RootWidget = CardButton;
 
-	UHorizontalBox* Row = MakeRow(T);
-	CardButton->AddChild(Row);
-	if (UButtonSlot* S = Cast<UButtonSlot>(Row->Slot))
+	UVerticalBox* Col = MakeColumn(T);
+	CardButton->AddChild(Col);
+	if (UButtonSlot* S = Cast<UButtonSlot>(Col->Slot))
 	{
 		S->SetHorizontalAlignment(HAlign_Fill);
-		S->SetPadding(FMargin(4.f));
+		S->SetPadding(FMargin(0.f, 0.f, 0.f, 8.f));
 	}
 
+	// Thumbnail on top, full width, cropped to fill.
 	USizeBox* ThumbBox = T->ConstructWidget<USizeBox>();
-	ThumbBox->SetWidthOverride(112.f);
-	ThumbBox->SetHeightOverride(112.f);
+	ThumbBox->SetHeightOverride(200.f);
+	ThumbBox->SetClipping(EWidgetClipping::ClipToBounds);
 	UBorder* ThumbBg = MakePanel(T, Background, FMargin(0.f));
+	UScaleBox* Scale = T->ConstructWidget<UScaleBox>();
+	Scale->SetStretch(EStretch::ScaleToFill);
 	ThumbImage = T->ConstructWidget<UImage>();
-	ThumbBg->AddChild(ThumbImage);
+	Scale->AddChild(ThumbImage);
+	ThumbBg->AddChild(Scale);
 	ThumbBox->AddChild(ThumbBg);
-	AddH(Row, ThumbBox, 16.f);
+	AddV(Col, ThumbBox, 8.f);
 
-	UVerticalBox* Col = MakeColumn(T);
-	TitleText = MakeText(T, FText::GetEmpty(), 16, Text, true);
-	OwnerText = MakeText(T, FText::GetEmpty(), 12, Accent);
-	KindText = MakeText(T, FText::GetEmpty(), 11, TextDim);
-	MetaText = MakeText(T, FText::GetEmpty(), 11, TextDim);
-	AddV(Col, TitleText, 2.f);
-	AddV(Col, OwnerText, 6.f);
-	AddV(Col, KindText, 2.f);
-	AddV(Col, MetaText, 0.f);
-	AddH(Row, Col, 0.f, true);
+	UVerticalBox* TextCol = MakeColumn(T);
+	TitleText = MakeText(T, FText::GetEmpty(), 17, GFCUI::Text, true);
+	OwnerText = MakeText(T, FText::GetEmpty(), 13, Accent);
+	KindText = MakeText(T, FText::GetEmpty(), 12, TextDim);
+	MetaText = MakeText(T, FText::GetEmpty(), 12, TextDim);
+	AddV(TextCol, TitleText, 2.f);
+	AddV(TextCol, OwnerText, 4.f);
+	UHorizontalBox* Row = MakeRow(T);
+	AddH(Row, KindText, 10.f);
+	AddH(Row, MetaText, 0.f, true);
+	AddV(TextCol, Row, 0.f);
+	UBorder* Pad = MakePanel(T, FLinearColor::Transparent, FMargin(12.f, 0.f));
+	Pad->AddChild(TextCol);
+	AddV(Col, Pad, 0.f);
 }
 
 void UGFCSeedCard::SetSeed(const FGFCSeed& InSeed)
@@ -127,10 +139,43 @@ void UGFCSeedCard::SetSeed(const FGFCSeed& InSeed)
 		MetaText->SetText(FText::Format(LOCTEXT("Meta", "{0} views · {1} likes · {2} comments"),
 			FText::AsNumber(Seed.Views), FText::AsNumber(Seed.Likes), FText::AsNumber(Seed.Comments)));
 	}
+	RestoreContent();
+}
+
+FString UGFCSeedCard::ThumbUrl() const
+{
+	const UGFCApiClient* C = GetGameInstance()->GetSubsystem<UGFCApiSubsystem>()->GetClient();
+	return C->ResolveMediaUrl(Seed.Thumb);
+}
+
+void UGFCSeedCard::ReleaseContent()
+{
+	if (!bContentLoaded)
+	{
+		return;
+	}
+	bContentLoaded = false;
 	if (ThumbImage)
 	{
-		const UGFCApiClient* C = GetGameInstance()->GetSubsystem<UGFCApiSubsystem>()->GetClient();
-		GFCLoadImageInto(this, ThumbImage, C->ResolveMediaUrl(Seed.Thumb));
+		ThumbImage->SetBrushResourceObject(nullptr);
+		ThumbImage->SetColorAndOpacity(FLinearColor::Transparent);
+	}
+	if (UGFCCacheSubsystem* Cache = GetGameInstance()->GetSubsystem<UGFCCacheSubsystem>())
+	{
+		Cache->ReleaseOwner(OwnerKey());
+	}
+}
+
+void UGFCSeedCard::RestoreContent()
+{
+	if (bContentLoaded)
+	{
+		return;
+	}
+	bContentLoaded = true;
+	if (ThumbImage)
+	{
+		GFCLoadImageInto(this, ThumbImage, ThumbUrl());
 	}
 }
 

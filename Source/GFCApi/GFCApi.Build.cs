@@ -19,7 +19,15 @@ public class GFCApi : ModuleRules
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
 			"JsonUtilities",
+			"ImageWrapper",
 		});
+
+		if (Target.Platform == UnrealTargetPlatform.Android)
+		{
+			// App Links, deep-link intents and the app cache folder (GFCAndroid.cpp).
+			PrivateDependencyModuleNames.Add("Launch");
+			AdditionalPropertiesForReceipt.Add("AndroidPlugin", System.IO.Path.Combine(ModuleDirectory, "GFCApi_UPL.xml"));
+		}
 
 		if (Target.Platform == UnrealTargetPlatform.Win64)
 		{

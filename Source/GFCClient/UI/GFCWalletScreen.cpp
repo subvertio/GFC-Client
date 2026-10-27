@@ -13,6 +13,7 @@
 #include "Components/Spacer.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
+#include "Components/VerticalBoxSlot.h"
 #include "GFCApiClient.h"
 #include "GFCApiSubsystem.h"
 #include "GFCJson.h"
@@ -45,18 +46,11 @@ namespace
 void UGFCWalletScreen::BuildDefaultLayout()
 {
 	UWidgetTree* T = WidgetTree;
-	UHorizontalBox* Columns = MakeRow(T);
-	T->RootWidget = Columns;
-
-	// Left column: scrollable controls
-	UScrollBox* LeftScroll = T->ConstructWidget<UScrollBox>();
-	USizeBox* LeftSize = T->ConstructWidget<USizeBox>();
-	LeftSize->SetWidthOverride(560.f);
-	LeftSize->AddChild(LeftScroll);
+	// Portrait: one scrolling column, most-used things first.
+	UScrollBox* Scroll = T->ConstructWidget<UScrollBox>();
+	T->RootWidget = Scroll;
 	UVerticalBox* Left = MakeColumn(T);
-	LeftScroll->AddChild(Left);
-	AddH(Columns, LeftSize, 20.f);
-	Cast<UHorizontalBoxSlot>(LeftSize->Slot)->SetVerticalAlignment(VAlign_Fill);
+	Scroll->AddChild(Left);
 
 	// Balance
 	{
@@ -67,13 +61,13 @@ void UGFCWalletScreen::BuildDefaultLayout()
 		AddV(Col, WalletPicker, 12.f);
 		BalanceText = MakeText(T, FText::GetEmpty(), 36, Accent, true);
 		AddV(Col, BalanceText, 4.f);
+		WalletIdText = MakeText(T, FText::GetEmpty(), 12, TextDim);
+		AddV(Col, WalletIdText, 8.f);
 		UHorizontalBox* IdRow = MakeRow(T);
-		WalletIdText = MakeText(T, FText::GetEmpty(), 11, TextDim);
 		CopyIdButton = MakeButton(T, LOCTEXT("CopyId", "Copy ID"), PanelRaised);
 		RefreshButton = MakeButton(T, LOCTEXT("Refresh", "Refresh"), PanelRaised);
-		AddH(IdRow, WalletIdText, 8.f, true);
-		AddH(IdRow, CopyIdButton);
-		AddH(IdRow, RefreshButton, 0.f);
+		AddH(IdRow, CopyIdButton, 8.f, true);
+		AddH(IdRow, RefreshButton, 0.f, true);
 		AddV(Col, IdRow, 0.f);
 	}
 
@@ -94,10 +88,8 @@ void UGFCWalletScreen::BuildDefaultLayout()
 		AddV(Col, MakeField(T, LOCTEXT("Pw", "Account password"), BackupPasswordBox), 8.f);
 		AddV(Col, MakeField(T, LOCTEXT("Pp", "Backup passphrase"), BackupPassphraseBox), 8.f);
 		AddV(Col, MakeField(T, LOCTEXT("Pc", "Confirm passphrase"), BackupConfirmBox), 12.f);
-		UHorizontalBox* Row = MakeRow(T);
 		ExportButton = MakeButton(T, LOCTEXT("Export", "Export backup file"), Warning);
-		AddH(Row, ExportButton, 0.f);
-		AddV(Col, Row, 8.f);
+		AddV(Col, ExportButton, 8.f);
 		BackupResultText = MakeText(T, FText::GetEmpty(), 11, Text);
 		AddV(Col, BackupResultText, 0.f);
 		BackupPanel = Card;
@@ -115,41 +107,32 @@ void UGFCWalletScreen::BuildDefaultLayout()
 		AddH(Row, MakeField(T, LOCTEXT("Amt", "Amount (GFC)"), AmountBox), 8.f, true);
 		AddH(Row, MakeField(T, LOCTEXT("Reason", "Note"), ReasonBox), 0.f, true);
 		AddV(Col, Row, 12.f);
-		UHorizontalBox* Btn = MakeRow(T);
 		SendButton = MakeButton(T, LOCTEXT("SendBtn", "Send"));
-		AddH(Btn, SendButton, 0.f);
-		AddV(Col, Btn, 0.f);
+		AddV(Col, SendButton, 0.f);
 	}
 
 	// Create / add
 	{
 		UVerticalBox* Col = Section(T, Left, LOCTEXT("More", "Wallets"));
-		UHorizontalBox* Create = MakeRow(T);
 		NewWalletNameBox = MakeInput(T, LOCTEXT("NameHint", "new wallet name (optional)"));
 		CreateWalletButton = MakeButton(T, LOCTEXT("Create", "Create wallet"));
-		AddH(Create, NewWalletNameBox, 8.f, true);
-		AddH(Create, CreateWalletButton, 0.f);
-		AddV(Col, Create, 10.f);
-		UHorizontalBox* Add = MakeRow(T);
+		AddV(Col, NewWalletNameBox, 8.f);
+		AddV(Col, CreateWalletButton, 16.f);
 		AddWalletIdBox = MakeInput(T, LOCTEXT("AddHint", "wallet ID you already own on this node"));
 		AddWalletButton = MakeButton(T, LOCTEXT("Add", "Add by ID"), PanelRaised);
-		AddH(Add, AddWalletIdBox, 8.f, true);
-		AddH(Add, AddWalletButton, 0.f);
-		AddV(Col, Add, 6.f);
+		AddV(Col, AddWalletIdBox, 8.f);
+		AddV(Col, AddWalletButton, 10.f);
 		AddV(Col, MakeText(T, LOCTEXT("PhoneNote",
 			"Your first wallet receives the 100 GFC welcome grant once your phone number is verified (coming to this app in milestone 3)."),
 			11, TextDim), 0.f);
 	}
 
-	// Right column: history
-	UBorder* HistCard = MakePanel(T, Panel, FMargin(18.f));
-	UVerticalBox* HistCol = MakeColumn(T);
-	HistCard->AddChild(HistCol);
-	AddV(HistCol, MakeText(T, LOCTEXT("History", "History"), 16, Text, true), 10.f);
-	HistoryList = T->ConstructWidget<UScrollBox>();
-	AddV(HistCol, HistoryList, 0.f, true);
-	AddH(Columns, HistCard, 0.f, true);
-	Cast<UHorizontalBoxSlot>(HistCard->Slot)->SetVerticalAlignment(VAlign_Fill);
+	// History, last: rows are added to a plain box inside the page's scroll.
+	{
+		UVerticalBox* Col = Section(T, Left, LOCTEXT("History", "History"));
+		HistoryList = MakeColumn(T);
+		AddV(Col, HistoryList, 0.f);
+	}
 }
 
 void UGFCWalletScreen::BindEvents()
@@ -321,6 +304,10 @@ void UGFCWalletScreen::ShowHistory(const TArray<FGFCTransaction>& Transactions)
 		if (UScrollBoxSlot* S = Cast<UScrollBoxSlot>(PanelSlot))
 		{
 			S->SetPadding(FMargin(0.f, 0.f, 0.f, 6.f));
+		}
+		else if (UVerticalBoxSlot* V = Cast<UVerticalBoxSlot>(PanelSlot))
+		{
+			V->SetPadding(FMargin(0.f, 0.f, 0.f, 6.f));
 		}
 	}
 }

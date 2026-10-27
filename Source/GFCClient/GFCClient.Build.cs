@@ -19,6 +19,9 @@ public class GFCClient : ModuleRules
 			"Slate",
 			"SlateCore",
 			"GFCApi",
+			"ProceduralMeshComponent",
+			"MediaAssets",
+			"AudioMixer",
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]

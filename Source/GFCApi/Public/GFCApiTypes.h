@@ -157,3 +157,15 @@ struct GFCAPI_API FGFCShareInfo
 	UPROPERTY(BlueprintReadOnly, Category = "GFC") FString XIntentUrl;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC") FString AppLink;
 };
+
+/** POST /seeds/{id}/played. Not crediting is normal (own seed, daily limit, unverified phone...). */
+USTRUCT(BlueprintType)
+struct GFCAPI_API FGFCPlayResult
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "GFC") bool bCredited = false;
+	UPROPERTY(BlueprintReadOnly, Category = "GFC") double Amount = 0.0;
+	/** Why it didn't credit, e.g. "self-play" or "daily limit for this creator reached". */
+	UPROPERTY(BlueprintReadOnly, Category = "GFC") FString Reason;
+};
