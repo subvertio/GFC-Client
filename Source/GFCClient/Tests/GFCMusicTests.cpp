@@ -55,21 +55,21 @@ bool FGFCPlaybackPathTest::RunTest(const FString&)
 
 namespace
 {
-	void Put32(TArray<uint8>& B, uint32 V) { for (int32 i = 0; i < 4; ++i) B.Add(uint8(V >> (8 * i))); }
-	void Put16(TArray<uint8>& B, uint16 V) { B.Add(uint8(V)); B.Add(uint8(V >> 8)); }
-	void Tag(TArray<uint8>& B, const char* T) { B.Append(reinterpret_cast<const uint8*>(T), 4); }
+	void MusicPut32(TArray<uint8>& B, uint32 V) { for (int32 i = 0; i < 4; ++i) B.Add(uint8(V >> (8 * i))); }
+	void MusicPut16(TArray<uint8>& B, uint16 V) { B.Add(uint8(V)); B.Add(uint8(V >> 8)); }
+	void MusicTag(TArray<uint8>& B, const char* T) { B.Append(reinterpret_cast<const uint8*>(T), 4); }
 
 	/** RIFF/WAVE header: fmt (plain or extensible), a LIST chunk, then data of DataBytes. */
 	TArray<uint8> Header(uint16 Format, uint16 Channels, uint32 Rate, uint16 Bits, uint32 DataBytes, bool bExtensible = false)
 	{
 		TArray<uint8> B;
-		Tag(B, "RIFF"); Put32(B, 0); Tag(B, "WAVE");
-		Tag(B, "fmt "); Put32(B, bExtensible ? 40 : 16);
-		Put16(B, bExtensible ? 0xFFFE : Format); Put16(B, Channels); Put32(B, Rate); Put32(B, Rate * Channels * Bits / 8);
-		Put16(B, Channels * Bits / 8); Put16(B, Bits);
-		if (bExtensible) { Put16(B, 22); Put16(B, Bits); Put32(B, 3); Put16(B, Format); for (int32 i = 0; i < 14; ++i) B.Add(0); }
-		Tag(B, "LIST"); Put32(B, 5); B.Append({'I', 'N', 'F', 'O', '!', 0}); // odd size: padded
-		Tag(B, "data"); Put32(B, DataBytes);
+		MusicTag(B, "RIFF"); MusicPut32(B, 0); MusicTag(B, "WAVE");
+		MusicTag(B, "fmt "); MusicPut32(B, bExtensible ? 40 : 16);
+		MusicPut16(B, bExtensible ? 0xFFFE : Format); MusicPut16(B, Channels); MusicPut32(B, Rate); MusicPut32(B, Rate * Channels * Bits / 8);
+		MusicPut16(B, Channels * Bits / 8); MusicPut16(B, Bits);
+		if (bExtensible) { MusicPut16(B, 22); MusicPut16(B, Bits); MusicPut32(B, 3); MusicPut16(B, Format); for (int32 i = 0; i < 14; ++i) B.Add(0); }
+		MusicTag(B, "LIST"); MusicPut32(B, 5); B.Append({'I', 'N', 'F', 'O', '!', 0}); // odd size: padded
+		MusicTag(B, "data"); MusicPut32(B, DataBytes);
 		return B;
 	}
 }
