@@ -73,7 +73,7 @@ void UGFCMusicPlayer::Play(const FGFCSeed& InSeed)
 	UGFCCacheSubsystem* Cache = GetGameInstance()->GetSubsystem<UGFCCacheSubsystem>();
 	UGFCApiClient* C = GetGameInstance()->GetSubsystem<UGFCApiSubsystem>()->GetClient();
 	// A compressed streaming copy, when the node provides one, beats the original.
-	const FString Source = InSeed.Stream.IsEmpty() ? InSeed.Full : InSeed.Stream;
+	const FString Source = InSeed.GetPlaybackPath();
 	if (!Cache || !C || Source.IsEmpty())
 	{
 		return;

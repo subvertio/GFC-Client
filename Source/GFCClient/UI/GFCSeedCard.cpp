@@ -171,6 +171,7 @@ void UGFCSeedCard::BuildDefaultLayout()
 	UOverlay* Over = T->ConstructWidget<UOverlay>();
 	UScaleBox* Scale = T->ConstructWidget<UScaleBox>();
 	Scale->SetStretch(EStretch::ScaleToFill);
+	ThumbScale = Scale;
 	ThumbImage = T->ConstructWidget<UImage>();
 	Scale->AddChild(ThumbImage);
 
@@ -360,7 +361,7 @@ void UGFCSeedCard::HandleMediaClicked()
 	}
 	UGFCCacheSubsystem* Cache = GetGameInstance()->GetSubsystem<UGFCCacheSubsystem>();
 	const UGFCApiClient* C = GetGameInstance()->GetSubsystem<UGFCApiSubsystem>()->GetClient();
-	if (!Cache || !C || Seed.Full.IsEmpty())
+	if (!Cache || !C || Seed.GetPlaybackPath().IsEmpty())
 	{
 		return;
 	}
@@ -369,7 +370,7 @@ void UGFCSeedCard::HandleMediaClicked()
 	TWeakObjectPtr<UGFCSeedCard> WeakThis(this);
 	const FString Id = Seed.Id;
 	// The card becomes the one live heavy item: whatever else was playing stops.
-	Cache->FetchFile(C->ResolveMediaUrl(Seed.Full), OwnerKey(), int64(GetDefault<UGFCApiSettings>()->MaxDiskCacheMB) * 1024 * 1024 / 2, true,
+	Cache->FetchFile(C->ResolveMediaUrl(Seed.GetPlaybackPath()), OwnerKey(), int64(GetDefault<UGFCApiSettings>()->MaxDiskCacheMB) * 1024 * 1024 / 2, true,
 		[WeakThis, Id, Kind](EGFCFetchResult Result, const FString& Path, int64)
 		{
 			if (!WeakThis.IsValid() || WeakThis->Seed.Id != Id || !WeakThis->bLoadingInline)
@@ -395,6 +396,8 @@ void UGFCSeedCard::HandleMediaClicked()
 			{
 				WeakThis->ThumbImage->SetBrushResourceObject(Session->GetVideoTexture());
 				WeakThis->ThumbImage->SetColorAndOpacity(FLinearColor::White);
+				// Whole frame, letterboxed: filling would crop it, and zoom in further when the phone turns.
+				if (WeakThis->ThumbScale) WeakThis->ThumbScale->SetStretch(EStretch::ScaleToFit);
 			}
 			const UGFCApiClient* Client = WeakThis->GetGameInstance()->GetSubsystem<UGFCApiSubsystem>()->GetClient();
 			WeakThis->Tracker.Begin(Id, Kind, Client->IsLoggedIn() && WeakThis->Seed.Owner.Equals(Client->GetUsername(), ESearchCase::IgnoreCase));
@@ -423,6 +426,7 @@ void UGFCSeedCard::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 	{
 		return;
 	}
+	Inline->FitBrush(ThumbImage);
 	if (Tracker.NotifyPlayback(Inline->GetPositionSeconds(), Inline->GetDurationSeconds()))
 	{
 		UGFCApiClient* C = GetGameInstance()->GetSubsystem<UGFCApiSubsystem>()->GetClient();
@@ -450,6 +454,10 @@ void UGFCSeedCard::StopInline()
 	{
 		Inline->Release();
 		Inline = nullptr;
+	}
+	if (ThumbScale)
+	{
+		ThumbScale->SetStretch(EStretch::ScaleToFill); // thumbnails fill the frame
 	}
 }
 

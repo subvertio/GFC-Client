@@ -400,12 +400,14 @@ void UGFCSeedDetailScreen::LoadFullContent()
 {
 	UGFCCacheSubsystem* Cache = GetGameInstance()->GetSubsystem<UGFCCacheSubsystem>();
 	const UGFCApiClient* C = Client();
-	if (!Cache || !C || Seed.Full.IsEmpty())
+	if (!Cache || !C || Seed.GetPlaybackPath().IsEmpty())
 	{
 		return;
 	}
+	// FileSize is the original's; a streaming copy is much smaller (the download's own cap still applies).
+	const bool bStreamCopy = !Seed.Stream.IsEmpty();
 	const int64 Cap = MaxBytesForKind();
-	if (Seed.FileSize > Cap)
+	if (!bStreamCopy && Seed.FileSize > Cap)
 	{
 		SetState(EGFCDetailState::Failed, FText::Format(LOCTEXT("TooBigKnown", "This file is {0} MB; the limit on phones is {1} MB."),
 			MegaBytes(Seed.FileSize), MegaBytes(Cap)));
@@ -415,7 +417,9 @@ void UGFCSeedDetailScreen::LoadFullContent()
 	const int64 AskAbove = int64(GetDefault<UGFCApiSettings>()->CellularConfirmMB) * 1024 * 1024;
 	if (UGFCCacheSubsystem::IsOnCellular() && Seed.FileSize > AskAbove)
 	{
-		SetState(EGFCDetailState::ConfirmCellular, FText::Format(LOCTEXT("AskCell", "You're on mobile data. Download {0} MB?"), MegaBytes(Seed.FileSize)));
+		SetState(EGFCDetailState::ConfirmCellular, bStreamCopy
+			? LOCTEXT("AskCellStream", "You're on mobile data. Play it anyway?")
+			: FText::Format(LOCTEXT("AskCell", "You're on mobile data. Download {0} MB?"), MegaBytes(Seed.FileSize)));
 		return;
 	}
 	StartDownload();
@@ -424,10 +428,10 @@ void UGFCSeedDetailScreen::LoadFullContent()
 void UGFCSeedDetailScreen::StartDownload()
 {
 	UGFCCacheSubsystem* Cache = GetGameInstance()->GetSubsystem<UGFCCacheSubsystem>();
-	const FString Url = Client()->ResolveMediaUrl(Seed.Full);
+	const FString Url = Client()->ResolveMediaUrl(Seed.GetPlaybackPath());
 	const uint32 Serial = ++LoadSerial;
 	LoadStarted = FPlatformTime::Seconds();
-	SetState(EGFCDetailState::Downloading, Seed.FileSize > 0
+	SetState(EGFCDetailState::Downloading, Seed.FileSize > 0 && Seed.Stream.IsEmpty()
 		? FText::Format(LOCTEXT("DlSize", "Downloading {0}…"), FileSize(Seed.FileSize))
 		: LOCTEXT("Dl", "Downloading…"));
 
@@ -598,8 +602,12 @@ void UGFCSeedDetailScreen::HandleOwnerReleased(const FString& Owner)
 void UGFCSeedDetailScreen::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
+	if (Media && Media->GetVideoTexture())
+	{
+		Media->FitBrush(PreviewImage); // letterboxed at the video's own aspect, in any orientation
+	}
 
-	const bool bLoading = State == EGFCDetailState::Downloading || State == EGFCDetailState::Preparing;
+	const bool bLoading =State == EGFCDetailState::Downloading || State == EGFCDetailState::Preparing;
 	if (bLoading && FPlatformTime::Seconds() - LoadStarted > GetDefault<UGFCApiSettings>()->ModelLoadTimeoutSeconds)
 	{
 		ReleaseContent();

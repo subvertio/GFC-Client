@@ -5,6 +5,7 @@
 #include "GFCMediaSession.generated.h"
 
 class AActor;
+class UImage;
 class UMediaPlayer;
 class UMediaSoundComponent;
 class UMediaTexture;
@@ -25,6 +26,12 @@ public:
 
 	/** For video: the texture to show (nullptr for audio). */
 	UMediaTexture* GetVideoTexture() const { return Texture; }
+	/**
+	 * Gives Image's brush the video's real frame size once the first frame is decoded, so a ScaleToFit box
+	 * letterboxes it at the right aspect (the brush otherwise keeps the thumbnail's size, or 32x32).
+	 * Call each tick while the video shows; it's cheap when nothing changed.
+	 */
+	void FitBrush(UImage* Image) const;
 
 	float GetPositionSeconds() const;
 	float GetDurationSeconds() const;

@@ -143,8 +143,13 @@ struct GFCAPI_API FGFCSeed
 	UPROPERTY(BlueprintReadOnly, Category = "GFC") FString Description;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC") TArray<FString> Tags;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC") FString Full;
-	/** A smaller copy for streaming (e.g. AAC for a big WAV), when the node makes one ("stream"). Players prefer it. */
+	/**
+	 * A smaller copy for streaming, when the node makes one ("stream"; null until it exists): AAC for a big
+	 * WAV, or for video an H.264 MP4 at most 720p with any rotation baked into the pixels. Players prefer it.
+	 */
 	UPROPERTY(BlueprintReadOnly, Category = "GFC") FString Stream;
+	/** What to play: the streaming copy when there is one, else the original. */
+	const FString& GetPlaybackPath() const { return Stream.IsEmpty() ? Full : Stream; }
 	UPROPERTY(BlueprintReadOnly, Category = "GFC") FString Thumb;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC") FString ContentType;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC") int64 FileSize = 0;

@@ -42,6 +42,17 @@ bool FGFCAudioKindsTest::RunTest(const FString&)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGFCPlaybackPathTest, "GFC.Music.PlaybackPath", MusicFlags)
+bool FGFCPlaybackPathTest::RunTest(const FString&)
+{
+	FGFCSeed S;
+	S.Full = TEXT("/originals/clip.mov");
+	TestEqual(TEXT("original until the copy exists"), S.GetPlaybackPath(), S.Full);
+	S.Stream = TEXT("/streams/abc.mp4");
+	TestEqual(TEXT("the streaming copy once it does"), S.GetPlaybackPath(), S.Stream);
+	return true;
+}
+
 namespace
 {
 	void Put32(TArray<uint8>& B, uint32 V) { for (int32 i = 0; i < 4; ++i) B.Add(uint8(V >> (8 * i))); }
