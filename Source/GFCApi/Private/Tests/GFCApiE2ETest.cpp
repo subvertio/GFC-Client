@@ -340,10 +340,11 @@ bool FGFCLocalNodeE2ETest::RunTest(const FString&)
 	});
 	Run->Add(TEXT("phone verification link"), [this, C, Node](auto Next)
 	{
-		C->GetVerifyStatus([this, C, Node, Next](const FGFCApiResult& R, const bool& bVerified)
+		C->GetVerifyStatus([this, C, Node, Next](const FGFCApiResult& R, const FGFCVerifyStatus& S)
 		{
 			TestTrue(FString::Printf(TEXT("verify status ok (%s)"), *R.Error), R.bOk);
-			TestFalse(TEXT("a new account isn't verified"), bVerified);
+			TestFalse(TEXT("a new account isn't verified"), S.bVerified);
+			TestEqual(TEXT("nothing paid before verifying"), S.Rewards(), 0.0);
 			C->CreateVerifyLink([this, Node, Next](const FGFCApiResult& L, const FGFCVerifyLink& Link)
 			{
 				TestTrue(FString::Printf(TEXT("verify link ok (%s)"), *L.Error), L.bOk);

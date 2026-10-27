@@ -44,6 +44,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "GFC|Wallet")
 	void MarkWalletsBackedUp();
 
+	/** Remembers wallets the node says belong to the user (a new device learns them without "Add by ID"). Returns how many were new. */
+	int32 LearnWallets(const TArray<FString>& WalletIds);
+
 	/** Records the balance the user has now seen for one of their wallets. */
 	void NoteBalance(const FString& WalletId, int64 Cents);
 

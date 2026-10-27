@@ -357,14 +357,28 @@ void UGFCRootWidget::ShowStatus(const FText& Message, bool bError)
 
 void UGFCRootWidget::AnnounceEarnings()
 {
+	UGFCApiSubsystem* Api = GetGameInstance()->GetSubsystem<UGFCApiSubsystem>();
 	TWeakObjectPtr<UGFCRootWidget> WeakThis(this);
-	GetGameInstance()->GetSubsystem<UGFCApiSubsystem>()->CheckEarnings([WeakThis](int64 EarnedCents)
+	auto Check = [WeakThis, Api]()
 	{
-		if (WeakThis.IsValid() && EarnedCents > 0)
+		Api->CheckEarnings([WeakThis](int64 EarnedCents)
 		{
-			UE_LOG(LogGFCApi, Log, TEXT("Earned since last login: %lld cents"), EarnedCents);
-			UGFCRewardBurst::Play(WeakThis.Get(), double(EarnedCents) / 100.0, LOCTEXT("Earned", "You earned GFC while you were away!"));
+			if (WeakThis.IsValid() && EarnedCents > 0)
+			{
+				UE_LOG(LogGFCApi, Log, TEXT("Earned since last login: %lld cents"), EarnedCents);
+				UGFCRewardBurst::Play(WeakThis.Get(), double(EarnedCents) / 100.0, LOCTEXT("Earned", "You earned GFC while you were away!"));
+			}
+		});
+	};
+	// Learn the account's wallets first, so a new device shows the balance (their first look isn't "earned").
+	Api->GetClient()->GetVerifyStatus([WeakThis, Api, Check](const FGFCApiResult& R, const FGFCVerifyStatus& S)
+	{
+		if (!WeakThis.IsValid()) return;
+		if (R.bOk && Api->LearnWallets(S.Wallets) > 0 && WeakThis->WalletScreen)
+		{
+			WeakThis->WalletScreen->OnWalletsLearned();
 		}
+		Check();
 	});
 }
 
@@ -422,19 +436,32 @@ void UGFCRootWidget::StartPhoneVerification()
 
 void UGFCRootWidget::OnBackFromVerification()
 {
+	UGFCApiSubsystem* Api = GetGameInstance()->GetSubsystem<UGFCApiSubsystem>();
+	UGFCApiClient* C = Api->GetClient();
+	// Celebrate only the change to verified: we sent the user to verify, or last saw them unverified.
+	const TOptional<bool> Before = C->GetLastKnownVerified();
+	const bool bWasUnverified = bVerifyingPhone || (Before.IsSet() && !Before.GetValue());
 	bVerifyingPhone = false;
-	UGFCApiClient* C = GetGameInstance()->GetSubsystem<UGFCApiSubsystem>()->GetClient();
 	if (!C->IsLoggedIn()) return;
 	TWeakObjectPtr<UGFCRootWidget> WeakThis(this);
-	C->GetVerifyStatus([WeakThis](const FGFCApiResult& R, const bool& bVerified)
+	C->GetVerifyStatus([WeakThis, Api, bWasUnverified](const FGFCApiResult& R, const FGFCVerifyStatus& S)
 	{
 		if (!WeakThis.IsValid() || !R.bOk) return;
-		if (WeakThis->WalletScreen) WeakThis->WalletScreen->SetPhoneVerified(bVerified);
-		if (bVerified)
+		if (Api->LearnWallets(S.Wallets) > 0 && WeakThis->WalletScreen) WeakThis->WalletScreen->OnWalletsLearned();
+		if (WeakThis->WalletScreen) WeakThis->WalletScreen->SetPhoneVerified(S.bVerified);
+		if (!S.bVerified || !bWasUnverified)
 		{
-			WeakThis->ShowStatus(LOCTEXT("Verified", "Phone verified. Rewards are on."));
-			WeakThis->AnnounceEarnings(); // the welcome grant and any first post bonus: ka-ching
+			return;
 		}
+		WeakThis->ShowStatus(LOCTEXT("Verified", "Phone verified. Rewards are on."));
+		if (S.Rewards() > 0.0)
+		{
+			// The welcome grant and any first post bonus, together: ka-ching.
+			UGFCRewardBurst::Play(WeakThis.Get(), S.Rewards(), S.FirstPostBonus > 0.0
+				? LOCTEXT("VerifiedBoth", "You're verified! Welcome grant + first post bonus")
+				: LOCTEXT("VerifiedGrant", "You're verified! Welcome grant"));
+		}
+		Api->CheckEarnings([](int64) {}); // counted as seen, so the next login doesn't celebrate it again
 	});
 }
 

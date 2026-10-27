@@ -30,6 +30,9 @@ public:
 	/** Shows or hides the "Verify your phone" card. */
 	void SetPhoneVerified(bool bVerified);
 
+	/** Wallets were learned from the node: rebuild the list and show the balance. */
+	void OnWalletsLearned();
+
 	UFUNCTION(BlueprintCallable, Category = "GFC")
 	void RefreshSelected();
 

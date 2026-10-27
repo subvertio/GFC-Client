@@ -29,7 +29,7 @@ struct GFCAPI_API FGFCJson
 	static bool ParsePlayResult(const FString& Body, FGFCPlayResult& Out);
 	/** POST /seeds/upload, including repost_of when the node recognises a repost. */
 	static bool ParseUploadResult(const FString& Body, FGFCUploadResult& Out);
-	static bool ParseVerifyStatus(const FString& Body, bool& bOutVerified);
+	static bool ParseVerifyStatus(const FString& Body, FGFCVerifyStatus& Out);
 	static bool ParseVerifyLink(const FString& Body, FGFCVerifyLink& Out);
 	static bool ParseBlocks(const FString& Body, TArray<FString>& Out);
 	static void ReadRepost(const TSharedPtr<FJsonObject>& Obj, FGFCRepostInfo& Out);

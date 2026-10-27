@@ -19,10 +19,16 @@ namespace
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGFCVerifyJsonTest, "GFC.Trust.VerifyJson", TrustFlags)
 bool FGFCVerifyJsonTest::RunTest(const FString&)
 {
-	bool bVerified = true;
-	TestTrue(TEXT("status parses"), FGFCJson::ParseVerifyStatus(TEXT(R"({"verified":false})"), bVerified));
-	TestFalse(TEXT("not verified"), bVerified);
-	TestFalse(TEXT("status needs the field"), FGFCJson::ParseVerifyStatus(TEXT("{}"), bVerified));
+	FGFCVerifyStatus S;
+	TestTrue(TEXT("older node's status parses"), FGFCJson::ParseVerifyStatus(TEXT(R"({"verified":false})"), S));
+	TestFalse(TEXT("not verified"), S.bVerified);
+	TestEqual(TEXT("no rewards"), S.Rewards(), 0.0);
+	TestTrue(TEXT("full status parses"), FGFCJson::ParseVerifyStatus(
+		TEXT(R"({"verified":true,"rewards":{"grant":100.0,"first_post_bonus":1000.0},"wallets":["w1","w2",""]})"), S));
+	TestTrue(TEXT("verified"), S.bVerified);
+	TestEqual(TEXT("verifying paid grant + bonus"), S.Rewards(), 1100.0);
+	TestEqual(TEXT("wallets (empty ids dropped)"), S.Wallets.Num(), 2);
+	TestFalse(TEXT("status needs the field"), FGFCJson::ParseVerifyStatus(TEXT("{}"), S));
 
 	FGFCVerifyLink Link;
 	TestTrue(TEXT("link parses"), FGFCJson::ParseVerifyLink(

@@ -139,6 +139,21 @@ void UGFCApiSubsystem::RememberWallet(const FString& WalletId, const FString& Na
 	Persist();
 }
 
+int32 UGFCApiSubsystem::LearnWallets(const TArray<FString>& WalletIds)
+{
+	int32 Added = 0;
+	const TArray<FGFCKnownWallet> Known = GetKnownWallets();
+	for (const FString& Id : WalletIds)
+	{
+		if (!Known.ContainsByPredicate([&](const FGFCKnownWallet& W) { return W.WalletId == Id; }))
+		{
+			RememberWallet(Id, Added == 0 && Known.Num() == 0 ? TEXT("main") : TEXT(""));
+			++Added;
+		}
+	}
+	return Added;
+}
+
 int64 UGFCApiSubsystem::EarnedSince(int64 LastSeenCents, int64 NowCents)
 {
 	return LastSeenCents >= 0 && NowCents > LastSeenCents ? NowCents - LastSeenCents : 0;

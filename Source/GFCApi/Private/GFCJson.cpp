@@ -334,14 +334,33 @@ bool FGFCJson::ParseUploadResult(const FString& Body, FGFCUploadResult& Out)
 	return !Out.Seed.Id.IsEmpty();
 }
 
-bool FGFCJson::ParseVerifyStatus(const FString& Body, bool& bOutVerified)
+bool FGFCJson::ParseVerifyStatus(const FString& Body, FGFCVerifyStatus& Out)
 {
 	const TSharedPtr<FJsonObject> Obj = ParseObject(Body);
 	if (!Obj.IsValid() || !Obj->HasField(TEXT("verified")))
 	{
 		return false;
 	}
-	bOutVerified = Bool(Obj, TEXT("verified"));
+	Out = FGFCVerifyStatus();
+	Out.bVerified = Bool(Obj, TEXT("verified"));
+	const TSharedPtr<FJsonObject>* Rewards = nullptr;
+	if (Obj->TryGetObjectField(TEXT("rewards"), Rewards))
+	{
+		Out.Grant = FMath::Max(0.0, Num(*Rewards, TEXT("grant")));
+		Out.FirstPostBonus = FMath::Max(0.0, Num(*Rewards, TEXT("first_post_bonus")));
+	}
+	const TArray<TSharedPtr<FJsonValue>>* Wallets = nullptr;
+	if (Obj->TryGetArrayField(TEXT("wallets"), Wallets))
+	{
+		for (const TSharedPtr<FJsonValue>& V : *Wallets)
+		{
+			FString Id;
+			if (V.IsValid() && V->TryGetString(Id) && !Id.IsEmpty() && Id.Len() <= 128)
+			{
+				Out.Wallets.Add(Id);
+			}
+		}
+	}
 	return true;
 }
 

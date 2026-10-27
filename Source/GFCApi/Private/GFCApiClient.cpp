@@ -67,6 +67,7 @@ void UGFCApiClient::ClearSession()
 	Token.Reset();
 	BlockedUsers.Reset();
 	ReportedSeeds.Reset();
+	LastKnownVerified.Reset();
 	if (bHad)
 	{
 		OnSessionChanged.Broadcast();
@@ -366,9 +367,15 @@ void UGFCApiClient::GetShareInfo(const FString& SeedId, TCallback<FGFCShareInfo>
 		&FGFCJson::ParseShareInfo, MoveTemp(Done));
 }
 
-void UGFCApiClient::GetVerifyStatus(TCallback<bool> Done)
+void UGFCApiClient::GetVerifyStatus(TCallback<FGFCVerifyStatus> Done)
 {
-	Call<bool>(TEXT("GET"), TEXT("/verify/status"), FString(), FString(), true, &FGFCJson::ParseVerifyStatus, MoveTemp(Done));
+	TWeakObjectPtr<UGFCApiClient> WeakThis(this);
+	Call<FGFCVerifyStatus>(TEXT("GET"), TEXT("/verify/status"), FString(), FString(), true, &FGFCJson::ParseVerifyStatus,
+		[WeakThis, Done](const FGFCApiResult& R, const FGFCVerifyStatus& S)
+		{
+			if (R.bOk && WeakThis.IsValid()) WeakThis->LastKnownVerified = S.bVerified;
+			if (Done) Done(R, S);
+		});
 }
 
 void UGFCApiClient::CreateVerifyLink(TCallback<FGFCVerifyLink> Done)

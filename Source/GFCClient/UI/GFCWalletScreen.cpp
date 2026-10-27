@@ -171,6 +171,11 @@ void UGFCWalletScreen::SetPhoneVerified(bool bVerified)
 	if (VerifyPanel) VerifyPanel->SetVisibility(bVerified ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
 }
 
+void UGFCWalletScreen::OnWalletsLearned()
+{
+	RebuildPicker(SelectedWalletId);
+}
+
 void UGFCWalletScreen::HandleVerifyPhone()
 {
 	if (Root.IsValid()) Root->StartPhoneVerification();
@@ -182,9 +187,14 @@ void UGFCWalletScreen::OnScreenShown()
 	if (UGFCApiClient* C = Client(); C && C->IsLoggedIn())
 	{
 		TWeakObjectPtr<UGFCWalletScreen> WeakThis(this);
-		C->GetVerifyStatus([WeakThis](const FGFCApiResult& R, const bool& bVerified)
+		C->GetVerifyStatus([WeakThis](const FGFCApiResult& R, const FGFCVerifyStatus& S)
 		{
-			if (WeakThis.IsValid() && R.bOk) WeakThis->SetPhoneVerified(bVerified);
+			if (!WeakThis.IsValid() || !R.bOk) return;
+			WeakThis->SetPhoneVerified(S.bVerified);
+			if (UGFCApiSubsystem* A = WeakThis->GetGameInstance()->GetSubsystem<UGFCApiSubsystem>(); A && A->LearnWallets(S.Wallets) > 0)
+			{
+				WeakThis->OnWalletsLearned();
+			}
 		});
 	}
 	if (BackupResultText) BackupResultText->SetText(FText::GetEmpty());

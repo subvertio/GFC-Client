@@ -204,6 +204,19 @@ struct GFCAPI_API FGFCUploadResult
 	UPROPERTY(BlueprintReadOnly, Category = "GFC") bool bFirstPostBonusPending = false;
 };
 
+/** GET /verify/status: is the phone verified, what did verifying pay, and the account's wallets on the node. */
+struct GFCAPI_API FGFCVerifyStatus
+{
+	bool bVerified = false;
+	/** GFC paid for verifying: the welcome grant and the first post bonus (0 on older nodes). */
+	double Grant = 0.0;
+	double FirstPostBonus = 0.0;
+	/** The account's wallet IDs on the node (empty on older nodes). */
+	TArray<FString> Wallets;
+
+	double Rewards() const { return Grant + FirstPostBonus; }
+};
+
 /** POST /verify/link: a one-time page to verify the account's phone in the browser. */
 struct GFCAPI_API FGFCVerifyLink
 {

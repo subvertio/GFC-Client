@@ -107,8 +107,10 @@ public:
 
 	// ---- phone verification (rewards need it) ----
 
-	/** Whether the account's phone is verified. */
-	void GetVerifyStatus(TCallback<bool> Done);
+	/** Whether the account's phone is verified, what verifying paid, and the account's wallets. */
+	void GetVerifyStatus(TCallback<FGFCVerifyStatus> Done);
+	/** The last verified state the node reported this session (unset until asked). */
+	TOptional<bool> GetLastKnownVerified() const { return LastKnownVerified; }
 	/** A one-time page to verify the phone in the browser (Cloudflare Turnstile only runs in web pages). */
 	void CreateVerifyLink(TCallback<FGFCVerifyLink> Done);
 
@@ -223,4 +225,5 @@ private:
 	/** Lower-case usernames this user blocked, and seeds they reported (this session). */
 	TSet<FString> BlockedUsers;
 	TSet<FString> ReportedSeeds;
+	TOptional<bool> LastKnownVerified;
 };
