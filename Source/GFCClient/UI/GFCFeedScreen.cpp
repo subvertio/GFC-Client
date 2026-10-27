@@ -202,11 +202,8 @@ void UGFCFeedScreen::Populate(const TArray<FGFCSeed>& Seeds)
 				WeakThis->Root->ShowSeed(Selected);
 			}
 		});
-		UPanelSlot* PanelSlot = SeedList->AddChild(Card);
-		if (UScrollBoxSlot* S = Cast<UScrollBoxSlot>(PanelSlot))
-		{
-			S->SetPadding(FMargin(0.f, 0.f, 0.f, 12.f));
-		}
+		SeedList->AddChild(Card);
+		SeedList->AddChild(MakeDivider(WidgetTree));
 		Card->SetSeed(Seed);
 	}
 }

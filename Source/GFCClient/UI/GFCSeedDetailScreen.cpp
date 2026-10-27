@@ -104,7 +104,7 @@ void UGFCSeedDetailScreen::BuildDefaultLayout()
 	USizeBox* PreviewBox = T->ConstructWidget<USizeBox>();
 	PreviewBox->SetHeightOverride(340.f);
 	PreviewBox->SetClipping(EWidgetClipping::ClipToBounds);
-	UBorder* PreviewBg = MakePanel(T, Panel, FMargin(0.f));
+	UBorder* PreviewBg = MakePanel(T, FGFCTheme::Get().Surface, FMargin(0.f));
 	UOverlay* Over = T->ConstructWidget<UOverlay>();
 	UScaleBox* Fit = T->ConstructWidget<UScaleBox>();
 	Fit->SetStretch(EStretch::ScaleToFit);
@@ -133,7 +133,7 @@ void UGFCSeedDetailScreen::BuildDefaultLayout()
 	AddV(Col, PrimaryButton, 16.f);
 
 	TitleText = MakeText(T, FText::GetEmpty(), 24, Text, true);
-	OwnerText = MakeText(T, FText::GetEmpty(), 14, Accent);
+	OwnerText = MakeText(T, FText::GetEmpty(), 14, AccentText);
 	MetaText = MakeText(T, FText::GetEmpty(), 12, TextDim);
 	DescriptionText = MakeText(T, FText::GetEmpty(), 15, Text);
 	AddV(Col, TitleText, 4.f);

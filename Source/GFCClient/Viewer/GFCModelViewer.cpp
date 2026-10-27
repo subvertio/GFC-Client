@@ -79,7 +79,7 @@ void AGFCModelViewer::ShowModel(const FGFCModelData& Model, int32 MaxTextureSize
 
 	RenderTarget = NewObject<UTextureRenderTarget2D>(this);
 	RenderTarget->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8_SRGB;
-	RenderTarget->ClearColor = FLinearColor(0.010f, 0.014f, 0.030f);
+	RenderTarget->ClearColor = FLinearColor::Black;
 	RenderTarget->InitAutoFormat(RenderSize, RenderSize);
 	RenderTarget->UpdateResourceImmediate(true);
 	Capture->TextureTarget = RenderTarget;

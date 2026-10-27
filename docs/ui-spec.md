@@ -35,19 +35,39 @@ Blueprint** later without C++ changes.
 Blueprint hooks: `GFC Api Subsystem` (Get Client, Known Wallets, Needs Backup, Set Node), and every API call on
 `GFC Api Client` (Login, Register, Get Feed, Send GFC, Export Wallet Backup and so on), each with a completion event.
 
-## Visual language (default layout)
+## Theme: pure black (the only theme)
 
-| Token | Use | Linear colour |
+Milestone 1 has one theme, a pure black interface. It's easy on the eyes, and on
+the **OLED screens most phones have, black pixels are switched off, which saves
+battery**. That fits the mobile discipline. There's no light theme.
+
+All colours are named tokens in **one place**: `FGFCTheme` in
+`Source/GFCClient/UI/GFCUIStyle.h/.cpp`. Tune them there (sRGB hex):
+
+| Token | Hex | Use |
 |---|---|---|
-| Background | App background | (0.010, 0.014, 0.030) |
-| Panel | Cards, top and bottom bars | (0.030, 0.040, 0.075) |
-| PanelRaised | Secondary buttons, rows, feed cards | (0.050, 0.064, 0.115) |
-| Accent | Primary buttons, balance, creator names | (0.020, 0.560, 0.910) |
-| Warning | Backup prompt | (0.910, 0.380, 0.020) |
-| Danger | Errors in the status line | (0.800, 0.090, 0.070) |
-| Success | Incoming amounts | (0.110, 0.650, 0.250) |
+| `Background` | `#000000` | App background, top and bottom bars, feed posts |
+| `Surface` | `#16181C` | Raised surfaces and cards (wallet sections, login, media frames) |
+| `SurfacePressed` | `#1D1F23` | Hover and pressed states |
+| `Border` | `#2F3336` | Dividers, card and input outlines, secondary button outlines |
+| `Text` | `#E7E9EA` | Primary text |
+| `TextSecondary` | `#71767B` | Secondary text: handles, times, stats, hints |
+| `Accent` | `#3B4CCA` | The GFC accent (the share pages' colour): primary buttons, focused inputs |
+| `AccentText` | derived | `Accent` blended 45% toward white, for accent-coloured text (the brand, balance, creator links). `#3B4CCA` alone is too dark to read as text on black. |
+| `Success` | `#00BA7C` | Success, rewards (incoming GFC), the verified badge |
+| `Danger` | `#F4212E` | Errors |
+| `Warning` | `#FFAD1F` | The wallet backup prompt (an outlined card and its button) |
 
-Font: engine Roboto.
+Shapes: cards have 16 dp corners. Buttons are 24 dp pills: primary filled with `Accent`, secondary outlined
+with `Border`. Inputs are black with a `Border` outline that turns `Accent` on focus. Font: engine Roboto.
+
+The accent is deliberately GFC's own, not X's blue. The feed follows familiar social-feed conventions
+(avatar, name, @handle, time, content, a stats row), but doesn't use X's logo, name, icons or distinctive marks.
+
+**Icons:** milestone 1 uses text labels and letter avatars, so no icon assets are shipped yet. When icons are
+added, use an open-licensed set, imported as a font or SVG-derived textures, and record the license here:
+[Material Symbols](https://fonts.google.com/icons) (Apache License 2.0) or [Lucide](https://lucide.dev)
+(ISC License). Don't use X's or other platforms' icon sets.
 
 ## Root (`GFCRootWidget`)
 
@@ -99,14 +119,18 @@ re-requests it. Visible cards' thumbnails are kept when the app is backgrounded.
 
 ### Seed card (`GFCSeedCard`)
 
-Full-width card: thumbnail on top (200 dp, cropped to fill), then title, creator, kind and stats.
+A social-feed post on black, separated by `Border` dividers: a letter avatar, then **name** @handle · time,
+the title, the media (220 dp, cropped to fill, in a rounded frame), and a stats row (kind in `AccentText`, then
+views, likes and comments).
 
 | Part | Type | Required | Notes |
 |---|---|---|---|
 | `CardButton` | Button | yes | Opens the seed detail. Precise Tap, so swipes scroll. |
 | `ThumbImage` | Image | yes | From the cache; hidden until it arrives. |
 | `TitleText`, `OwnerText` | TextBlock | yes | "by {owner}". |
-| `KindText`, `MetaText` | TextBlock | no | "3D model"; "N views · N likes · N comments". |
+| `KindText`, `MetaText` | TextBlock | no | "3D model"; "N views  N likes  N comments". |
+| `HandleText` | TextBlock | no | "@owner · 3h". |
+| `AvatarSlot` | SizeBox | no | Holds the avatar (a letter for now; profile images later). |
 
 ## Seed detail (`GFCSeedDetailScreen`)
 

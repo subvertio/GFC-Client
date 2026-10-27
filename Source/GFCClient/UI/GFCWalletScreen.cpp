@@ -34,10 +34,10 @@ namespace
 
 	UVerticalBox* Section(UWidgetTree* T, UVerticalBox* Parent, const FText& Title, const FLinearColor& Color = Panel)
 	{
-		UBorder* Card = MakePanel(T, Color, FMargin(18.f));
+		UBorder* Card = MakeCard(T, FMargin(18.f));
 		UVerticalBox* Col = MakeColumn(T);
 		Card->AddChild(Col);
-		AddV(Col, MakeText(T, Title, 16, Text, true), 10.f);
+		AddV(Col, MakeText(T, Title, 17, Text, true), 10.f);
 		AddV(Parent, Card, 14.f);
 		return Col;
 	}
@@ -56,10 +56,11 @@ void UGFCWalletScreen::BuildDefaultLayout()
 	{
 		UVerticalBox* Col = Section(T, Left, LOCTEXT("YourWallet", "Your wallet"));
 		WalletPicker = T->ConstructWidget<UComboBoxString>();
+		StyleComboBox(WalletPicker);
 		NoWalletText = MakeText(T, LOCTEXT("NoWallet", "You don't have a wallet on this device yet. Create one below."), 12, TextDim);
 		AddV(Col, NoWalletText, 6.f);
 		AddV(Col, WalletPicker, 12.f);
-		BalanceText = MakeText(T, FText::GetEmpty(), 36, Accent, true);
+		BalanceText = MakeText(T, FText::GetEmpty(), 36, AccentText, true);
 		AddV(Col, BalanceText, 4.f);
 		WalletIdText = MakeText(T, FText::GetEmpty(), 12, TextDim);
 		AddV(Col, WalletIdText, 8.f);
@@ -73,7 +74,7 @@ void UGFCWalletScreen::BuildDefaultLayout()
 
 	// Backup prompt: deliberately loud.
 	{
-		UBorder* Card = MakePanel(T, FLinearColor(0.20f, 0.075f, 0.005f), FMargin(18.f));
+		UBorder* Card = MakeCard(T, FMargin(18.f), &Warning); // the one card outlined in colour: hard to miss
 		UVerticalBox* Col = MakeColumn(T);
 		Card->AddChild(Col);
 		BackupTitleText = MakeText(T, LOCTEXT("BackupTitle", "⚠ Back up your wallet"), 18, Warning, true);
@@ -287,7 +288,7 @@ void UGFCWalletScreen::ShowHistory(const TArray<FGFCTransaction>& Transactions)
 	{
 		const bool bIncoming = Tx.Recipient == SelectedWalletId;
 		const FString Other = bIncoming ? Tx.Sender : Tx.Recipient;
-		UBorder* RowBg = MakePanel(T, PanelRaised, FMargin(10.f, 8.f));
+		UBorder* RowBg = MakePanel(T, FGFCTheme::Get().Surface, FMargin(0.f, 10.f));
 		UVerticalBox* Col = MakeColumn(T);
 		RowBg->AddChild(Col);
 		UHorizontalBox* Top = MakeRow(T);
@@ -300,6 +301,10 @@ void UGFCWalletScreen::ShowHistory(const TArray<FGFCTransaction>& Transactions)
 		AddV(Col, MakeText(T, FText::Format(LOCTEXT("TxMeta", "{0} {1} · {2} · {3}"),
 			bIncoming ? LOCTEXT("From", "from") : LOCTEXT("ToL", "to"), FText::FromString(ShortId(Other)),
 			FText::FromString(Tx.TxType), FText::FromString(Tx.Timestamp.Left(19).Replace(TEXT("T"), TEXT(" ")))), 10, TextDim), 0.f);
+		if (HistoryList->GetChildrenCount() > 0)
+		{
+			HistoryList->AddChild(MakeDivider(T));
+		}
 		UPanelSlot* PanelSlot = HistoryList->AddChild(RowBg);
 		if (UScrollBoxSlot* S = Cast<UScrollBoxSlot>(PanelSlot))
 		{

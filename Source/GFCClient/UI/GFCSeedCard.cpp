@@ -5,6 +5,7 @@
 #include "Components/Button.h"
 #include "Components/ButtonSlot.h"
 #include "Components/HorizontalBox.h"
+#include "Components/HorizontalBoxSlot.h"
 #include "Components/Image.h"
 #include "Components/ScaleBox.h"
 #include "Components/SizeBox.h"
@@ -85,58 +86,86 @@ void UGFCSeedCard::BuildDefaultLayout()
 {
 	UWidgetTree* T = WidgetTree;
 
+	// A social-feed post: avatar | name @handle · time / title / media / stats.
 	CardButton = T->ConstructWidget<UButton>();
-	CardButton->SetBackgroundColor(PanelRaised);
+	CardButton->SetStyle(FlatButtonStyle());
 	CardButton->SetTouchMethod(EButtonTouchMethod::PreciseTap); // swipes scroll the feed
 	CardButton->SetClickMethod(EButtonClickMethod::PreciseClick);
 	T->RootWidget = CardButton;
 
-	UVerticalBox* Col = MakeColumn(T);
-	CardButton->AddChild(Col);
-	if (UButtonSlot* S = Cast<UButtonSlot>(Col->Slot))
+	UHorizontalBox* Post = MakeRow(T);
+	CardButton->AddChild(Post);
+	if (UButtonSlot* S = Cast<UButtonSlot>(Post->Slot))
 	{
 		S->SetHorizontalAlignment(HAlign_Fill);
-		S->SetPadding(FMargin(0.f, 0.f, 0.f, 8.f));
+		S->SetPadding(FMargin(4.f, 12.f));
 	}
 
-	// Thumbnail on top, full width, cropped to fill.
+	AvatarSlot = T->ConstructWidget<USizeBox>();
+	AvatarSlot->SetWidthOverride(40.f);
+	AddH(Post, AvatarSlot, 12.f);
+	if (UHorizontalBoxSlot* S = Cast<UHorizontalBoxSlot>(AvatarSlot->Slot))
+	{
+		S->SetVerticalAlignment(VAlign_Top);
+	}
+
+	UVerticalBox* Body = MakeColumn(T);
+	AddH(Post, Body, 0.f, true);
+
+	UHorizontalBox* Header = MakeRow(T);
+	OwnerText = MakeText(T, FText::GetEmpty(), 15, GFCUI::Text, true);
+	OwnerText->SetAutoWrapText(false);
+	HandleText = MakeText(T, FText::GetEmpty(), 14, TextDim);
+	HandleText->SetAutoWrapText(false);
+	AddH(Header, OwnerText, 6.f);
+	AddH(Header, HandleText, 0.f, true);
+	AddV(Body, Header, 2.f);
+
+	TitleText = MakeText(T, FText::GetEmpty(), 15, GFCUI::Text);
+	AddV(Body, TitleText, 10.f);
+
 	USizeBox* ThumbBox = T->ConstructWidget<USizeBox>();
-	ThumbBox->SetHeightOverride(200.f);
+	ThumbBox->SetHeightOverride(220.f);
 	ThumbBox->SetClipping(EWidgetClipping::ClipToBounds);
-	UBorder* ThumbBg = MakePanel(T, Background, FMargin(0.f));
+	UBorder* ThumbBg = MakeCard(T, FMargin(0.f));
 	UScaleBox* Scale = T->ConstructWidget<UScaleBox>();
 	Scale->SetStretch(EStretch::ScaleToFill);
 	ThumbImage = T->ConstructWidget<UImage>();
 	Scale->AddChild(ThumbImage);
 	ThumbBg->AddChild(Scale);
 	ThumbBox->AddChild(ThumbBg);
-	AddV(Col, ThumbBox, 8.f);
+	AddV(Body, ThumbBox, 10.f);
 
-	UVerticalBox* TextCol = MakeColumn(T);
-	TitleText = MakeText(T, FText::GetEmpty(), 17, GFCUI::Text, true);
-	OwnerText = MakeText(T, FText::GetEmpty(), 13, Accent);
-	KindText = MakeText(T, FText::GetEmpty(), 12, TextDim);
-	MetaText = MakeText(T, FText::GetEmpty(), 12, TextDim);
-	AddV(TextCol, TitleText, 2.f);
-	AddV(TextCol, OwnerText, 4.f);
-	UHorizontalBox* Row = MakeRow(T);
-	AddH(Row, KindText, 10.f);
-	AddH(Row, MetaText, 0.f, true);
-	AddV(TextCol, Row, 0.f);
-	UBorder* Pad = MakePanel(T, FLinearColor::Transparent, FMargin(12.f, 0.f));
-	Pad->AddChild(TextCol);
-	AddV(Col, Pad, 0.f);
+	UHorizontalBox* Stats = MakeRow(T);
+	KindText = MakeText(T, FText::GetEmpty(), 13, AccentText, true);
+	KindText->SetAutoWrapText(false);
+	MetaText = MakeText(T, FText::GetEmpty(), 13, TextDim);
+	AddH(Stats, KindText, 14.f);
+	AddH(Stats, MetaText, 0.f, true);
+	AddV(Body, Stats, 0.f);
 }
 
 void UGFCSeedCard::SetSeed(const FGFCSeed& InSeed)
 {
 	Seed = InSeed;
 	if (TitleText) TitleText->SetText(FText::FromString(Seed.Title));
-	if (OwnerText) OwnerText->SetText(FText::Format(LOCTEXT("By", "by {0}"), FText::FromString(Seed.Owner.IsEmpty() ? TEXT("unknown") : Seed.Owner)));
+	const FString Owner = Seed.Owner.IsEmpty() ? FString(TEXT("unknown")) : Seed.Owner;
+	if (OwnerText) OwnerText->SetText(FText::FromString(Owner));
+	if (HandleText)
+	{
+		const FText When = RelativeTime(Seed.CreatedAt);
+		HandleText->SetText(When.IsEmpty() ? FText::FromString(TEXT("@") + Owner)
+			: FText::Format(LOCTEXT("HandleTime", "@{0} · {1}"), FText::FromString(Owner), When));
+	}
+	if (AvatarSlot)
+	{
+		AvatarSlot->ClearChildren();
+		AvatarSlot->AddChild(MakeAvatar(WidgetTree, Owner, 40.f));
+	}
 	if (KindText) KindText->SetText(GFCMediaKindLabel(Seed.GetMediaKind()));
 	if (MetaText)
 	{
-		MetaText->SetText(FText::Format(LOCTEXT("Meta", "{0} views · {1} likes · {2} comments"),
+		MetaText->SetText(FText::Format(LOCTEXT("Meta", "{0} views    {1} likes    {2} comments"),
 			FText::AsNumber(Seed.Views), FText::AsNumber(Seed.Likes), FText::AsNumber(Seed.Comments)));
 	}
 	RestoreContent();

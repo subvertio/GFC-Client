@@ -103,10 +103,10 @@ void UGFCRootWidget::BuildDefaultLayout()
 	Safe->AddChild(Col);
 
 	// Top bar: brand on the left, account on the right.
-	UBorder* Bar = MakePanel(T, Panel, FMargin(16.f, 6.f));
+	UBorder* Bar = MakePanel(T, Background, FMargin(16.f, 6.f));
 	UHorizontalBox* BarRow = MakeRow(T);
 	Bar->AddChild(BarRow);
-	AddH(BarRow, MakeText(T, LOCTEXT("Brand", "GFC"), 22, Accent, true), 12.f);
+	AddH(BarRow, MakeText(T, LOCTEXT("Brand", "GFC"), 22, AccentText, true), 12.f);
 	UserText = MakeText(T, FText::GetEmpty(), 12, TextDim);
 	UserText->SetAutoWrapText(false);
 	AddH(BarRow, UserText, 8.f, true);
@@ -115,6 +115,7 @@ void UGFCRootWidget::BuildDefaultLayout()
 	AddH(BarRow, LogoutButton, 0.f);
 	AddH(BarRow, LoginNavButton, 0.f);
 	AddV(Col, Bar, 0.f);
+	AddV(Col, MakeDivider(T), 0.f);
 
 	UBorder* StatusBar = MakePanel(T, Background, FMargin(16.f, 6.f));
 	StatusText = MakeText(T, FText::GetEmpty(), 12, TextDim);
@@ -127,7 +128,8 @@ void UGFCRootWidget::BuildDefaultLayout()
 	AddV(Col, Body, 0.f, true);
 
 	// Bottom navigation: one-handed reach.
-	UBorder* NavBg = MakePanel(T, Panel, FMargin(12.f, 8.f));
+	AddV(Col, MakeDivider(T), 0.f);
+	UBorder* NavBg = MakePanel(T, Background, FMargin(12.f, 8.f));
 	UHorizontalBox* Nav = MakeRow(T);
 	NavBg->AddChild(Nav);
 	FeedNavButton = MakeButton(T, LOCTEXT("Feed", "Feed"), PanelRaised);

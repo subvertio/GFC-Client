@@ -29,7 +29,7 @@ void UGFCLoginScreen::BuildDefaultLayout()
 	Size->SetMaxDesiredWidth(520.f);
 	Scroll->AddChild(Size);
 
-	UBorder* Card = MakePanel(T, Panel, FMargin(20.f));
+	UBorder* Card = MakeCard(T, FMargin(20.f));
 	Size->AddChild(Card);
 	UVerticalBox* Col = MakeColumn(T);
 	Card->AddChild(Col);

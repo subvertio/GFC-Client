@@ -1,6 +1,7 @@
 #include "UI/GFCScreenBase.h"
 
 #include "Blueprint/WidgetTree.h"
+#include "Components/ScrollBox.h"
 #include "GFCApiSubsystem.h"
 #include "UI/GFCRootWidget.h"
 
@@ -16,6 +17,12 @@ void UGFCScreenBase::NativeOnInitialized()
 
 void UGFCScreenBase::OnScreenShown()
 {
+	// Screens open at the top, and don't jump around when an input takes focus.
+	if (UScrollBox* Scroll = WidgetTree ? Cast<UScrollBox>(WidgetTree->RootWidget) : nullptr)
+	{
+		Scroll->SetScrollWhenFocusChanges(EScrollWhenFocusChanges::NoScroll);
+		Scroll->ScrollToStart();
+	}
 	K2_OnScreenShown();
 }
 
