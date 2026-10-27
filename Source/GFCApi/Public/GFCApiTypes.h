@@ -225,6 +225,30 @@ struct GFCAPI_API FGFCVerifyLink
 	FString Url;
 };
 
+/** POST /seeds/{id}/like and /bookmark: the new state (the node toggles), and the like count. */
+struct GFCAPI_API FGFCToggleResult
+{
+	bool bOn = false;
+	/** Likes after the toggle; -1 when the node didn't say (bookmarks). */
+	int32 Count = -1;
+};
+
+/** One of the top earners in GET /podt/stats (by wallet: the node doesn't name owners). */
+struct GFCAPI_API FGFCTopEarner
+{
+	FString Wallet;
+	double EarnedGfc = 0.0;
+	int32 Transfers = 0;
+};
+
+/** GET /podt/stats: what the network has paid creators for views, and who earned most. */
+struct GFCAPI_API FGFCNetworkStats
+{
+	double TotalRewardGfc = 0.0;
+	int64 TotalTransfers = 0;
+	TArray<FGFCTopEarner> TopEarners;
+};
+
 /** One request, for the debug overlay. Never holds the token, bodies or query strings. */
 struct GFCAPI_API FGFCApiTrace
 {

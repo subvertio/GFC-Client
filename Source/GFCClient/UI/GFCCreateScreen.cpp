@@ -242,6 +242,29 @@ FString UGFCCreateScreen::WriteTextSeed(const FString& Body)
 	return FFileHelper::SaveStringToFile(Body, *Path, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM) ? Path : FString();
 }
 
+void UGFCCreateScreen::ComposeFrom(const FString& Body, TOptional<EGFCCaptureSource> Pick, bool bPostNow)
+{
+	if (Job.IsValid())
+	{
+		ShowStatus(LOCTEXT("Busy", "Wait for the current upload to finish, or cancel it."), true);
+		return;
+	}
+	if (BodyBox) BodyBox->SetText(FText::FromString(Body.Left(MaxBodyChars)));
+	if (!Chosen.Path.IsEmpty())
+	{
+		HandleRemoveMedia();
+	}
+	UpdatePostEnabled();
+	if (Pick.IsSet())
+	{
+		Choose(Pick.GetValue());
+	}
+	else if (bPostNow)
+	{
+		HandlePost();
+	}
+}
+
 void UGFCCreateScreen::Choose(EGFCCaptureSource Source)
 {
 	if (Job.IsValid())

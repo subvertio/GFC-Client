@@ -21,7 +21,10 @@
 #include "MediaTexture.h"
 #include "Viewer/GFCMediaSession.h"
 #include "Viewer/GFCMusicPlayer.h"
+#include "Components/VerticalBoxSlot.h"
+#include "HAL/PlatformApplicationMisc.h"
 #include "UI/GFCCreateScreen.h"
+#include "UI/GFCRootWidget.h"
 #include "UI/GFCUIStyle.h"
 
 #define LOCTEXT_NAMESPACE "GFCSeedCard"
@@ -89,6 +92,10 @@ void UGFCSeedCard::NativeOnInitialized()
 	if (MediaButton) MediaButton->OnClicked.AddDynamic(this, &ThisClass::HandleMediaClicked);
 	if (SoundButton) SoundButton->OnClicked.AddDynamic(this, &ThisClass::HandleSoundClicked);
 	if (MoreButton) MoreButton->OnClicked.AddDynamic(this, &ThisClass::HandleMoreClicked);
+	if (ReplyButton) ReplyButton->OnClicked.AddDynamic(this, &ThisClass::HandleClicked); // comments live on the post's screen
+	if (LikeButton) LikeButton->OnClicked.AddDynamic(this, &ThisClass::HandleLike);
+	if (BookmarkButton) BookmarkButton->OnClicked.AddDynamic(this, &ThisClass::HandleBookmark);
+	if (ShareButton) ShareButton->OnClicked.AddDynamic(this, &ThisClass::HandleShare);
 	if (UGFCCacheSubsystem* Cache = GetGameInstance()->GetSubsystem<UGFCCacheSubsystem>())
 	{
 		// Another card (or the detail screen) became the live heavy item: stop playing here.
@@ -218,6 +225,181 @@ void UGFCSeedCard::BuildDefaultLayout()
 	AddH(Stats, KindText, 14.f);
 	AddH(Stats, MetaText, 0.f, true);
 	AddV(Body, Stats, 0.f);
+	StatsRow = Stats;
+
+	// Desktop action row: each action is its own small target, so it never opens the post by accident.
+	const FGFCTheme& Th = FGFCTheme::Get();
+	UHorizontalBox* Actions = MakeRow(T);
+	auto Action = [T, &Th](UTextBlock*& OutText, const FLinearColor& Hover) -> UButton*
+	{
+		UButton* B = T->ConstructWidget<UButton>();
+		B->SetStyle(GhostButtonStyle(Hover, 17.f));
+		B->SetClickMethod(EButtonClickMethod::PreciseClick);
+		B->SetTouchMethod(EButtonTouchMethod::PreciseTap);
+		OutText = MakeText(T, FText::GetEmpty(), 13, Th.TextSecondary);
+		OutText->SetAutoWrapText(false);
+		B->AddChild(OutText);
+		if (UButtonSlot* S = Cast<UButtonSlot>(OutText->Slot)) S->SetPadding(FMargin(8.f, 6.f));
+		return B;
+	};
+	UTextBlock* Tx = nullptr;
+	ReplyButton = Action(Tx, Th.AccentTint);
+	ReplyText = Tx;
+	LikeButton = Action(Tx, Th.Like.CopyWithNewOpacity(0.1f));
+	LikeText = Tx;
+	ViewsText = MakeText(T, FText::GetEmpty(), 13, Th.TextSecondary);
+	ViewsText->SetAutoWrapText(false);
+	EarnedText = MakeText(T, FText::GetEmpty(), 13, Th.Gold);
+	EarnedText->SetAutoWrapText(false);
+	BookmarkButton = Action(Tx, Th.AccentTint);
+	BookmarkText = Tx;
+	UTextBlock* ShareGlyph = nullptr;
+	ShareButton = Action(ShareGlyph, Th.AccentTint);
+	ShareGlyph->SetText(FText::FromString(Icon::Share));
+	AddH(Actions, ReplyButton, 0.f, true);
+	AddH(Actions, LikeButton, 0.f, true);
+	AddH(Actions, ViewsText, 0.f, true);
+	AddH(Actions, EarnedText, 0.f, true);
+	AddH(Actions, BookmarkButton, 4.f);
+	AddH(Actions, ShareButton, 0.f);
+	for (UWidget* W : TArray<UWidget*>{ReplyButton, LikeButton, ViewsText, EarnedText})
+	{
+		if (UHorizontalBoxSlot* S = Cast<UHorizontalBoxSlot>(W->Slot)) S->SetHorizontalAlignment(HAlign_Left);
+	}
+	ReplyButton->SetToolTipText(LOCTEXT("ReplyTip", "Comments"));
+	LikeButton->SetToolTipText(LOCTEXT("LikeTip", "Like"));
+	ViewsText->SetToolTipText(LOCTEXT("ViewsTip", "Views"));
+	EarnedText->SetToolTipText(LOCTEXT("EarnedTip", "GFC this post has earned its creator"));
+	BookmarkButton->SetToolTipText(LOCTEXT("BookmarkTip", "Bookmark"));
+	ShareButton->SetToolTipText(LOCTEXT("ShareTip", "Copy link"));
+	AddV(Body, Actions, 0.f);
+	if (UVerticalBoxSlot* S = Cast<UVerticalBoxSlot>(Actions->Slot)) S->SetPadding(FMargin(-8.f, -2.f, 0.f, -6.f)); // icons line up with the text
+	ActionRow = Actions;
+	ActionRow->SetVisibility(ESlateVisibility::Collapsed);
+}
+
+void UGFCSeedCard::SetWideLayout(bool bInWide)
+{
+	bWide = bInWide;
+	if (StatsRow) StatsRow->SetVisibility(bWide ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
+	if (ActionRow) ActionRow->SetVisibility(bWide ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	if (USizeBox* Frame = Cast<USizeBox>(MediaFrame)) Frame->SetHeightOverride(bWide ? 320.f : 220.f);
+	if (CardButton && CardButton->GetChildrenCount() > 0)
+	{
+		if (UButtonSlot* S = Cast<UButtonSlot>(CardButton->GetChildAt(0)->Slot))
+		{
+			S->SetPadding(bWide ? FMargin(16.f, 12.f) : FMargin(4.f, 12.f));
+		}
+	}
+	UpdateActions();
+}
+
+void UGFCSeedCard::UpdateActions()
+{
+	if (!ActionRow)
+	{
+		return;
+	}
+	const FGFCTheme& Th = FGFCTheme::Get();
+	auto Count = [](int32 N) { return N > 0 ? FText::AsNumber(N) : FText::GetEmpty(); };
+	if (ReplyText) ReplyText->SetText(FText::Format(LOCTEXT("ReplyAction", "{0}  {1}"), FText::FromString(Icon::Reply), Count(Seed.Comments)));
+	if (LikeText)
+	{
+		LikeText->SetText(FText::Format(LOCTEXT("LikeAction", "{0}  {1}"), FText::FromString(Seed.bLiked ? Icon::Liked : Icon::Like), Count(Seed.Likes)));
+		LikeText->SetColorAndOpacity(FSlateColor(Seed.bLiked ? Th.Like : Th.TextSecondary));
+	}
+	if (ViewsText) ViewsText->SetText(FText::Format(LOCTEXT("ViewsAction", "{0}  {1}"), FText::FromString(Icon::Views), Count(Seed.Views)));
+	if (EarnedText)
+	{
+		FNumberFormattingOptions Two;
+		Two.MinimumFractionalDigits = 2;
+		Two.MaximumFractionalDigits = 2;
+		EarnedText->SetText(FText::Format(LOCTEXT("EarnedAction", "{0}  {1} GFC"), FText::FromString(Icon::Wallet), FText::AsNumber(Seed.GfcEarned, &Two)));
+		EarnedText->SetColorAndOpacity(FSlateColor(Seed.GfcEarned > 0.0 ? Th.Gold : Th.TextSecondary));
+	}
+	if (BookmarkText)
+	{
+		BookmarkText->SetText(FText::FromString(Seed.bBookmarked ? Icon::Bookmarked : Icon::Bookmark));
+		BookmarkText->SetColorAndOpacity(FSlateColor(Seed.bBookmarked ? Th.Accent : Th.TextSecondary));
+	}
+}
+
+void UGFCSeedCard::HandleLike()
+{
+	UGFCApiClient* C = GetGameInstance()->GetSubsystem<UGFCApiSubsystem>()->GetClient();
+	if (!C->IsLoggedIn())
+	{
+		if (UGFCRootWidget* Root = UGFCRootWidget::Find(this)) Root->ShowStatus(LOCTEXT("LoginToLike", "Log in to like posts."), true);
+		return;
+	}
+	if (bTogglingLike) return;
+	bTogglingLike = true;
+	// Shown at once; the node's answer has the real count.
+	Seed.bLiked = !Seed.bLiked;
+	Seed.Likes = FMath::Max(0, Seed.Likes + (Seed.bLiked ? 1 : -1));
+	UpdateActions();
+	TWeakObjectPtr<UGFCSeedCard> WeakThis(this);
+	const FString Id = Seed.Id;
+	C->ToggleLike(Id, [WeakThis, Id](const FGFCApiResult& R, const FGFCToggleResult& Toggle)
+	{
+		if (!WeakThis.IsValid() || WeakThis->Seed.Id != Id) return;
+		WeakThis->bTogglingLike = false;
+		FGFCSeed& S = WeakThis->Seed;
+		if (R.bOk)
+		{
+			S.bLiked = Toggle.bOn;
+			if (Toggle.Count >= 0) S.Likes = Toggle.Count;
+		}
+		else
+		{
+			S.bLiked = !S.bLiked;
+			S.Likes = FMath::Max(0, S.Likes + (S.bLiked ? 1 : -1));
+			if (UGFCRootWidget* Root = UGFCRootWidget::Find(WeakThis.Get())) Root->ShowStatus(FText::FromString(R.Error), true);
+		}
+		WeakThis->UpdateActions();
+	});
+}
+
+void UGFCSeedCard::HandleBookmark()
+{
+	UGFCApiClient* C = GetGameInstance()->GetSubsystem<UGFCApiSubsystem>()->GetClient();
+	if (!C->IsLoggedIn())
+	{
+		if (UGFCRootWidget* Root = UGFCRootWidget::Find(this)) Root->ShowStatus(LOCTEXT("LoginToBookmark", "Log in to bookmark posts."), true);
+		return;
+	}
+	if (bTogglingBookmark) return;
+	bTogglingBookmark = true;
+	Seed.bBookmarked = !Seed.bBookmarked;
+	UpdateActions();
+	TWeakObjectPtr<UGFCSeedCard> WeakThis(this);
+	const FString Id = Seed.Id;
+	C->ToggleBookmark(Id, [WeakThis, Id](const FGFCApiResult& R, const FGFCToggleResult& Toggle)
+	{
+		if (!WeakThis.IsValid() || WeakThis->Seed.Id != Id) return;
+		WeakThis->bTogglingBookmark = false;
+		UGFCRootWidget* Root = UGFCRootWidget::Find(WeakThis.Get());
+		if (R.bOk)
+		{
+			WeakThis->Seed.bBookmarked = Toggle.bOn;
+			if (Root) Root->ShowStatus(Toggle.bOn ? LOCTEXT("Bookmarked", "Added to your Bookmarks.") : LOCTEXT("Unbookmarked", "Removed from your Bookmarks."));
+		}
+		else
+		{
+			WeakThis->Seed.bBookmarked = !WeakThis->Seed.bBookmarked;
+			if (Root) Root->ShowStatus(FText::FromString(R.Error), true);
+		}
+		WeakThis->UpdateActions();
+	});
+}
+
+void UGFCSeedCard::HandleShare()
+{
+	FPlatformApplicationMisc::ClipboardCopy(*UGFCApiClient::BuildShareUrl(Seed.Id));
+	if (UGFCRootWidget* Root = UGFCRootWidget::Find(this))
+	{
+		Root->ShowStatus(LOCTEXT("LinkCopied", "Link copied to the clipboard."));
+	}
 }
 
 void UGFCSeedCard::SetSeed(const FGFCSeed& InSeed)
@@ -267,6 +449,7 @@ void UGFCSeedCard::SetSeed(const FGFCSeed& InSeed)
 		MetaText->SetText(FText::Format(LOCTEXT("Meta", "{0} views    {1} likes    {2} comments"),
 			FText::AsNumber(Seed.Views), FText::AsNumber(Seed.Likes), FText::AsNumber(Seed.Comments)));
 	}
+	UpdateActions();
 	UpdateMediaControls();
 	RestoreContent();
 }

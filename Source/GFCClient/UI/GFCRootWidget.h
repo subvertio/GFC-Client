@@ -3,10 +3,17 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "GFCApiTypes.h"
+#include "GFCMediaCapture.h"
 #include "GFCRootWidget.generated.h"
 
+class UBorder;
 class UButton;
 class UGFCCreateScreen;
+class UGFCLeftRail;
+class UGFCRightRail;
+class UHorizontalBox;
+class UOverlay;
+class USizeBox;
 class UGFCFeedScreen;
 class UGFCLoginScreen;
 class UGFCScreenBase;
@@ -17,8 +24,11 @@ class UWidget;
 class UWidgetSwitcher;
 
 /**
- * App shell (portrait, phone-first): safe-area aware, a slim top bar, one status
+ * App shell. Phone-first (portrait): safe-area aware, a slim top bar, one status
  * line, the active screen, and a bottom navigation bar within thumb reach.
+ * In a window at least GFCUI::Desktop::Breakpoint dp wide it switches, live, to the
+ * desktop layout: a navigation rail on the left, the active screen in a 600 dp centre
+ * column, and a right rail of node data (search, balance, trending, top earners).
  * Screen classes are configurable so Blueprint screens can replace the
  * code-built ones without touching C++. See docs/ui-spec.md.
  *
@@ -43,6 +53,20 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "GFC|Navigation") void ShowWallet();
 	UFUNCTION(BlueprintCallable, Category = "GFC|Navigation") void ShowCreate();
 	UFUNCTION(BlueprintCallable, Category = "GFC|Navigation") void ShowSeed(const FGFCSeed& Seed);
+	/** The For you feed (desktop Home; the phone's Feed button keeps the feed's current page). */
+	UFUNCTION(BlueprintCallable, Category = "GFC|Navigation") void ShowHome();
+	/** Search results for Query, or the top posts when it's empty. */
+	UFUNCTION(BlueprintCallable, Category = "GFC|Navigation") void ShowExplore(const FString& Query);
+	UFUNCTION(BlueprintCallable, Category = "GFC|Navigation") void ShowBookmarks();
+	/** The user's own posts. */
+	UFUNCTION(BlueprintCallable, Category = "GFC|Navigation") void ShowProfile();
+	UFUNCTION(BlueprintCallable, Category = "GFC") void Logout();
+
+	/** From the desktop composer: opens the create screen with Body, then the picker or the upload. */
+	void ComposeFromFeed(const FString& PostBody, TOptional<EGFCCaptureSource> Pick, bool bPostNow);
+
+	/** True while the window shows the desktop (three-column) layout. */
+	UFUNCTION(BlueprintPure, Category = "GFC") bool IsWideLayout() const { return Layout != ELayout::Phone; }
 
 	/** Opens a seed by id (deep links). Works without logging in: seeds are public. */
 	UFUNCTION(BlueprintCallable, Category = "GFC|Navigation") void OpenSeedById(const FString& SeedId);
@@ -71,6 +95,7 @@ public:
 protected:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeDestruct() override;
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidget)) TObjectPtr<UWidgetSwitcher> ScreenSwitcher;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidget)) TObjectPtr<UTextBlock> StatusText;
@@ -83,8 +108,29 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> LogoutButton;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> LoginNavButton;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> UserText;
+	/** Desktop rails (collapsed in the phone layout). */
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UGFCLeftRail> LeftRail;
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UGFCRightRail> RightRail;
 
 private:
+	enum class ELayout : uint8 { Phone, Wide, WideWithRightRail };
+	ELayout Layout = ELayout::Phone;
+	/** Applies a layout: which chrome shows, the centre column's width, the screens' wide mode. */
+	void ApplyLayout(ELayout NewLayout);
+	void UpdateDesktopNav();
+	void ShowFeedPage(uint8 Source, const FString& Query);
+
+	/** The layout parts that change between phone and desktop. */
+	UPROPERTY(Transient) TObjectPtr<UHorizontalBox> Shell;
+	UPROPERTY(Transient) TObjectPtr<USizeBox> CenterBox;
+	UPROPERTY(Transient) TObjectPtr<UBorder> Body;
+	UPROPERTY(Transient) TArray<TObjectPtr<UWidget>> PhoneChrome;
+	UPROPERTY(Transient) TArray<TObjectPtr<UWidget>> DesktopChrome;
+	/** Desktop status messages: a pill at the bottom that fades after a few seconds. */
+	UPROPERTY(Transient) TObjectPtr<UWidget> Toast;
+	UPROPERTY(Transient) TObjectPtr<UTextBlock> ToastText;
+	float ToastSeconds = 0.f;
+
 	void BuildDefaultLayout();
 	bool OpenStartScreenFromCommandLine();
 	void Activate(UGFCScreenBase* Screen);

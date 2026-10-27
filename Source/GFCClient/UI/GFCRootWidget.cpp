@@ -4,8 +4,13 @@
 #include "Components/Border.h"
 #include "Components/Button.h"
 #include "Components/HorizontalBox.h"
+#include "Components/HorizontalBoxSlot.h"
+#include "Components/Overlay.h"
+#include "Components/OverlaySlot.h"
 #include "Components/SafeZone.h"
+#include "Components/SizeBox.h"
 #include "Components/Spacer.h"
+#include "Brushes/SlateRoundedBoxBrush.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/WidgetSwitcher.h"
@@ -19,6 +24,7 @@
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "UI/GFCCreateScreen.h"
+#include "UI/GFCDesktopRails.h"
 #include "UI/GFCFeedScreen.h"
 #include "UI/GFCLoginScreen.h"
 #include "UI/GFCSeedDetailScreen.h"
@@ -101,6 +107,14 @@ void UGFCRootWidget::NativeOnInitialized()
 	if (CreateNavButton) CreateNavButton->OnClicked.AddDynamic(this, &ThisClass::ShowCreate);
 	if (LogoutButton) LogoutButton->OnClicked.AddDynamic(this, &ThisClass::HandleLogout);
 	if (LoginNavButton) LoginNavButton->OnClicked.AddDynamic(this, &ThisClass::ShowLogin);
+	if (LeftRail) LeftRail->SetRoot(this);
+	if (RightRail) RightRail->SetRoot(this);
+	TWeakObjectPtr<UGFCRootWidget> WeakRail(this);
+	FeedScreen->OnForYouLoaded = [WeakRail](const TArray<FGFCSeed>& Seeds)
+	{
+		if (WeakRail.IsValid() && WeakRail->RightRail) WeakRail->RightRail->SetTrending(Seeds);
+	};
+	ApplyLayout(ELayout::Phone); // the first tick switches to the desktop layout if the window is wide
 
 	UGFCApiSubsystem* Api = GetGameInstance()->GetSubsystem<UGFCApiSubsystem>();
 	Api->OnSessionChanged.AddDynamic(this, &ThisClass::HandleSessionChanged);
@@ -162,8 +176,68 @@ void UGFCRootWidget::BuildDefaultLayout()
 	T->RootWidget = Bg;
 	USafeZone* Safe = T->ConstructWidget<USafeZone>(); // notches, status bar, gesture bar
 	Bg->AddChild(Safe);
+	UOverlay* Layers = T->ConstructWidget<UOverlay>();
+	Safe->AddChild(Layers);
+
+	// Shell: [left rail | line | centre column | line | right rail]. The phone layout is the
+	// centre column alone, filling the width; the desktop layout centres all five.
+	Shell = MakeRow(T);
+	if (UOverlaySlot* S = Layers->AddChildToOverlay(Shell))
+	{
+		S->SetHorizontalAlignment(HAlign_Fill);
+		S->SetVerticalAlignment(VAlign_Fill);
+	}
+	auto VLine = [T]()
+	{
+		USizeBox* Box = T->ConstructWidget<USizeBox>();
+		Box->SetWidthOverride(1.f);
+		Box->AddChild(MakePanel(T, BorderColor, FMargin(0.f)));
+		return Box;
+	};
+	auto AddColumn = [this](UWidget* W, const FMargin& Pad)
+	{
+		UHorizontalBoxSlot* S = Shell->AddChildToHorizontalBox(W);
+		S->SetVerticalAlignment(VAlign_Fill);
+		S->SetPadding(Pad);
+		return S;
+	};
+
+	LeftRail = CreateWidget<UGFCLeftRail>(this, UGFCLeftRail::StaticClass());
+	USizeBox* LeftBox = T->ConstructWidget<USizeBox>();
+	LeftBox->SetWidthOverride(GFCUI::Desktop::LeftRailWidth);
+	LeftBox->AddChild(LeftRail);
+	AddColumn(LeftBox, FMargin(0.f, 0.f, 0.f, 0.f));
+	UWidget* LeftLine = VLine();
+	AddColumn(LeftLine, FMargin(0.f));
+
+	CenterBox = T->ConstructWidget<USizeBox>();
 	UVerticalBox* Col = MakeColumn(T);
-	Safe->AddChild(Col);
+	CenterBox->AddChild(Col);
+	AddColumn(CenterBox, FMargin(0.f))->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+
+	UWidget* RightLine = VLine();
+	AddColumn(RightLine, FMargin(0.f));
+	RightRail = CreateWidget<UGFCRightRail>(this, UGFCRightRail::StaticClass());
+	USizeBox* RightBox = T->ConstructWidget<USizeBox>();
+	RightBox->SetWidthOverride(GFCUI::Desktop::RightRailWidth);
+	RightBox->AddChild(RightRail);
+	AddColumn(RightBox, FMargin(GFCUI::Desktop::Gutter, 0.f, 0.f, 0.f));
+	DesktopChrome = {LeftBox, LeftLine, RightLine, RightBox};
+
+	// Desktop status: a toast at the bottom of the window.
+	UBorder* ToastBg = T->ConstructWidget<UBorder>();
+	ToastBg->SetBrush(FSlateRoundedBoxBrush(FGFCTheme::Get().Accent, 8.f));
+	ToastBg->SetPadding(FMargin(16.f, 12.f));
+	ToastText = MakeText(T, FText::GetEmpty(), 15, FLinearColor::White);
+	ToastBg->AddChild(ToastText);
+	ToastBg->SetVisibility(ESlateVisibility::Collapsed);
+	if (UOverlaySlot* S = Layers->AddChildToOverlay(ToastBg))
+	{
+		S->SetHorizontalAlignment(HAlign_Center);
+		S->SetVerticalAlignment(VAlign_Bottom);
+		S->SetPadding(FMargin(16.f, 0.f, 16.f, 32.f));
+	}
+	Toast = ToastBg;
 
 	// Top bar: brand on the left, account on the right.
 	UBorder* Bar = MakePanel(T, Background, FMargin(16.f, 6.f));
@@ -179,14 +253,15 @@ void UGFCRootWidget::BuildDefaultLayout()
 	AddH(BarRow, LogoutButton, 0.f);
 	AddH(BarRow, LoginNavButton, 0.f);
 	AddV(Col, Bar, 0.f);
-	AddV(Col, MakeDivider(T), 0.f);
+	UWidget* BarLine = MakeDivider(T);
+	AddV(Col, BarLine, 0.f);
 
 	UBorder* StatusBar = MakePanel(T, Background, FMargin(16.f, 6.f));
 	StatusText = MakeText(T, FText::GetEmpty(), 12, TextDim);
 	StatusBar->AddChild(StatusText);
 	AddV(Col, StatusBar, 0.f);
 
-	UBorder* Body = MakePanel(T, Background, FMargin(12.f, 0.f, 12.f, 8.f));
+	Body = MakePanel(T, Background, FMargin(12.f, 0.f, 12.f, 8.f));
 	ScreenSwitcher = T->ConstructWidget<UWidgetSwitcher>();
 	Body->AddChild(ScreenSwitcher);
 	AddV(Col, Body, 0.f, true);
@@ -198,7 +273,8 @@ void UGFCRootWidget::BuildDefaultLayout()
 	AddV(Col, MiniPlayer, 0.f);
 
 	// Bottom navigation: one-handed reach.
-	AddV(Col, MakeDivider(T), 0.f);
+	UWidget* NavLine = MakeDivider(T);
+	AddV(Col, NavLine, 0.f);
 	UBorder* NavBg = MakePanel(T, Background, FMargin(12.f, 8.f));
 	UHorizontalBox* Nav = MakeRow(T);
 	NavBg->AddChild(Nav);
@@ -210,6 +286,115 @@ void UGFCRootWidget::BuildDefaultLayout()
 	AddH(Nav, WalletNavButton, 0.f, true);
 	NavBar = NavBg;
 	AddV(Col, NavBg, 0.f);
+	PhoneChrome = {Bar, BarLine, StatusBar, NavLine};
+}
+
+void UGFCRootWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
+	// The layout follows the window, live: resizing across the breakpoint switches it.
+	const float Width = MyGeometry.GetLocalSize().X;
+	if (Width > 0.f)
+	{
+		const ELayout Wanted = Width < GFCUI::Desktop::Breakpoint ? ELayout::Phone
+			: (Width < GFCUI::Desktop::RightRailFrom ? ELayout::Wide : ELayout::WideWithRightRail);
+		if (Wanted != Layout)
+		{
+			ApplyLayout(Wanted);
+		}
+	}
+	if (ToastSeconds > 0.f)
+	{
+		ToastSeconds -= InDeltaTime;
+		if (ToastSeconds <= 0.f && Toast)
+		{
+			Toast->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
+}
+
+void UGFCRootWidget::ApplyLayout(ELayout NewLayout)
+{
+	const bool bWasWide = IsWideLayout();
+	Layout = NewLayout;
+	const bool bWide = IsWideLayout();
+	if (!Shell || !CenterBox)
+	{
+		return; // a Blueprint root without the desktop parts stays as it is
+	}
+	for (UWidget* W : PhoneChrome)
+	{
+		if (W) W->SetVisibility(bWide ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
+	}
+	for (UWidget* W : DesktopChrome)
+	{
+		if (W) W->SetVisibility(bWide ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
+	}
+	const bool bRightRail = Layout == ELayout::WideWithRightRail;
+	if (DesktopChrome.Num() == 4)
+	{
+		DesktopChrome[3]->SetVisibility(bRightRail ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
+	}
+	// Phone: the centre column fills the window. Desktop: fixed width, everything centred.
+	if (UHorizontalBoxSlot* S = Cast<UHorizontalBoxSlot>(CenterBox->Slot))
+	{
+		S->SetSize(FSlateChildSize(bWide ? ESlateSizeRule::Automatic : ESlateSizeRule::Fill));
+	}
+	if (bWide) CenterBox->SetWidthOverride(GFCUI::Desktop::CenterWidth);
+	else CenterBox->ClearWidthOverride();
+	if (UOverlaySlot* S = Cast<UOverlaySlot>(Shell->Slot))
+	{
+		S->SetHorizontalAlignment(bWide ? HAlign_Center : HAlign_Fill);
+	}
+	if (FeedScreen)
+	{
+		FeedScreen->SetWideLayout(bWide);
+		if (!bWide && FeedScreen->GetSource() != EGFCFeedSource::ForYou)
+		{
+			// The phone has only the feed: pages from the desktop rail go back to it.
+			FeedScreen->SetSource(EGFCFeedSource::ForYou);
+			if (ActiveScreen == FeedScreen) FeedScreen->Refresh();
+		}
+	}
+	if (!bWide && Toast)
+	{
+		Toast->SetVisibility(ESlateVisibility::Collapsed);
+	}
+	RefreshNav();
+	if (bWide && !bWasWide && RightRail)
+	{
+		RightRail->Refresh();
+	}
+}
+
+void UGFCRootWidget::UpdateDesktopNav()
+{
+	if (!LeftRail)
+	{
+		return;
+	}
+	EGFCNavItem Item = EGFCNavItem::None;
+	if (ActiveScreen == WalletScreen)
+	{
+		Item = EGFCNavItem::Wallet;
+	}
+	else if (ActiveScreen == FeedScreen)
+	{
+		switch (FeedScreen->GetSource())
+		{
+		case EGFCFeedSource::Explore: Item = EGFCNavItem::Explore; break;
+		case EGFCFeedSource::Bookmarks: Item = EGFCNavItem::Bookmarks; break;
+		case EGFCFeedSource::Mine: Item = EGFCNavItem::Profile; break;
+		default: Item = EGFCNavItem::Home; break;
+		}
+	}
+	LeftRail->SetActive(Item);
+	// The feed runs edge to edge between the column lines; other screens get a margin.
+	if (Body)
+	{
+		Body->SetPadding(!IsWideLayout() ? FMargin(12.f, 0.f, 12.f, 8.f)
+			: (ActiveScreen == FeedScreen ? FMargin(0.f) : FMargin(16.f, 12.f, 16.f, 8.f)));
+	}
 }
 
 bool UGFCRootWidget::OpenStartScreenFromCommandLine()
@@ -266,7 +451,9 @@ void UGFCRootWidget::RefreshNav()
 	const UGFCApiClient* C = GetGameInstance()->GetSubsystem<UGFCApiSubsystem>()->GetClient();
 	const bool bIn = C->IsLoggedIn();
 	const bool bOnLogin = ActiveScreen == LoginScreen;
-	if (NavBar) NavBar->SetVisibility(bIn ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	if (NavBar) NavBar->SetVisibility(bIn && !IsWideLayout() ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	if (LeftRail) LeftRail->Refresh();
+	UpdateDesktopNav();
 	if (LogoutButton) LogoutButton->SetVisibility(bIn ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	if (LoginNavButton) LoginNavButton->SetVisibility(!bIn && !bOnLogin ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	if (UserText)
@@ -283,6 +470,36 @@ void UGFCRootWidget::ShowLogin()
 }
 
 void UGFCRootWidget::ShowFeed() { Activate(FeedScreen); }
+
+void UGFCRootWidget::ShowFeedPage(uint8 Source, const FString& Query)
+{
+	if (FeedScreen)
+	{
+		FeedScreen->SetSource(EGFCFeedSource(Source), Query);
+		Activate(FeedScreen);
+	}
+}
+
+void UGFCRootWidget::ShowHome()
+{
+	ShowFeedPage(uint8(EGFCFeedSource::ForYou), FString());
+	if (RightRail && IsWideLayout()) RightRail->Refresh();
+}
+
+void UGFCRootWidget::ShowExplore(const FString& Query) { ShowFeedPage(uint8(EGFCFeedSource::Explore), Query); }
+void UGFCRootWidget::ShowBookmarks() { ShowFeedPage(uint8(EGFCFeedSource::Bookmarks), FString()); }
+void UGFCRootWidget::ShowProfile() { ShowFeedPage(uint8(EGFCFeedSource::Mine), FString()); }
+void UGFCRootWidget::Logout() { HandleLogout(); }
+
+void UGFCRootWidget::ComposeFromFeed(const FString& PostBody, TOptional<EGFCCaptureSource> Pick, bool bPostNow)
+{
+	if (!CreateScreen)
+	{
+		return;
+	}
+	ShowCreate();
+	CreateScreen->ComposeFrom(PostBody, Pick, bPostNow);
+}
 void UGFCRootWidget::ShowWallet() { Activate(WalletScreen); }
 void UGFCRootWidget::ShowCreate() { Activate(CreateScreen); }
 
@@ -359,6 +576,16 @@ void UGFCRootWidget::ShowStatus(const FText& Message, bool bError)
 	{
 		StatusText->SetText(Message);
 		StatusText->SetColorAndOpacity(FSlateColor(bError ? Danger : TextDim));
+	}
+	if (Toast && ToastText && IsWideLayout())
+	{
+		ToastText->SetText(Message);
+		if (UBorder* Bg = Cast<UBorder>(Toast))
+		{
+			Bg->SetBrush(FSlateRoundedBoxBrush(bError ? Danger : FGFCTheme::Get().Accent, 8.f));
+		}
+		Toast->SetVisibility(Message.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+		ToastSeconds = bError ? 6.f : 3.5f;
 	}
 }
 
@@ -513,6 +740,7 @@ void UGFCRootWidget::HandleSessionChanged()
 		ShowLogin();
 	}
 	RefreshNav();
+	if (RightRail && IsWideLayout()) RightRail->Refresh();
 }
 
 #undef LOCTEXT_NAMESPACE

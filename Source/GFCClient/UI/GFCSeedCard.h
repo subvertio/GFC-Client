@@ -47,6 +47,12 @@ public:
 	FString OwnerKey() const { return TEXT("card:") + Seed.Id; }
 	FString ThumbUrl() const;
 public:
+	/**
+	 * The desktop layout: an action row (reply, like, views, GFC earned, bookmark, share)
+	 * instead of the stats line, wider padding and taller media. Off by default (phone).
+	 */
+	void SetWideLayout(bool bInWide);
+
 	/** The card's text: Description trimmed and cut at MaxChars with an ellipsis (tap for the rest). */
 	static FString FeedBody(const FString& Description, int32 MaxChars);
 private:
@@ -79,6 +85,19 @@ protected:
 	/** Inline video: turns sound on/off. */
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> SoundButton;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> SoundLabel;
+	/** The phone's stats line (kind, views, likes, comments). */
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UWidget> StatsRow;
+	/** Desktop: the action row and its parts. */
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UWidget> ActionRow;
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> ReplyButton;
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> ReplyText;
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> LikeButton;
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> LikeText;
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> ViewsText;
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> EarnedText;
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> BookmarkButton;
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> BookmarkText;
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> ShareButton;
 
 private:
 	void BuildDefaultLayout();
@@ -90,6 +109,13 @@ private:
 	UFUNCTION() void HandleMediaClicked();
 	UFUNCTION() void HandleSoundClicked();
 	UFUNCTION() void HandleMoreClicked();
+	UFUNCTION() void HandleLike();
+	UFUNCTION() void HandleBookmark();
+	UFUNCTION() void HandleShare();
+	void UpdateActions();
+	bool bWide = false;
+	bool bTogglingLike = false;
+	bool bTogglingBookmark = false;
 
 	FGFCSeed Seed;
 	bool bContentLoaded = false;

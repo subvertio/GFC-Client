@@ -42,6 +42,12 @@ public:
 	/** For tests and the PC -GFCPost=<file> shortcut: use a file already on disk. */
 	void UseFile(const FString& Path);
 
+	/**
+	 * From the desktop feed's composer: carries the text over (replacing any unposted media),
+	 * then opens the picker for Pick, or posts the text at once when bPostNow.
+	 */
+	void ComposeFrom(const FString& Body, TOptional<EGFCCaptureSource> Pick, bool bPostNow);
+
 protected:
 	virtual void NativeDestruct() override;
 	virtual void BuildDefaultLayout() override;

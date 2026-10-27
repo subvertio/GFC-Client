@@ -1,6 +1,7 @@
 # GFC Client UI spec
 
-The app is **phone-first: portrait, touch-first and one-handed**. Every screen
+The app is **phone-first: portrait, touch-first and one-handed**, with a **desktop layout** for wide
+windows on PC (see [Desktop layout](#desktop-layout)). Every screen
 is built in C++ (`Source/GFCClient/UI`), so the project runs without
 hand-authored assets, and each screen is designed to be replaced by a **Widget
 Blueprint** later without C++ changes.
@@ -26,6 +27,8 @@ landscape, odd aspect ratios and other densities come later (see the roadmap).
 - **One-handed:** navigation sits in a bottom bar (Feed, Wallet). Primary actions sit under the content they act on.
 - **No hover-dependent UI.** Buttons use `Touch Method: Precise Tap` so a drag that starts on a button scrolls its list.
 - **Sizes are in dp.** The DPI curve (`DefaultEngine.ini`, `UIScaleCurve`) maps the target phone's 1080 px to 2.4375 (443 dp).
+  It's applied by `UGFCDPIScalingRule` (the project's custom DPI rule): on phones and in portrait PC windows it's the
+  curve on the shortest side, as before; in landscape PC windows it's the monitor's scale (1 dp = 1 px at 100%).
   Text: titles 22 to 26, body 13 to 16, captions 11 to 12. Inputs use 16 so phones don't zoom.
 - **Bandwidth:** thumbnails first; full media only on tap (and after asking, on mobile data above 10 MB).
 - **Preview while designing:** `.\Scripts\Run.ps1` (486x1075, the target phone at 45% size, mobile renderer), with `-Screen wallet|feed|seed:<id>|create`.
@@ -81,19 +84,27 @@ All colours are named tokens in **one place**: `FGFCTheme` in
 | `Border` | `#2F3336` | Dividers, card and input outlines, secondary button outlines |
 | `Text` | `#E7E9EA` | Primary text |
 | `TextSecondary` | `#71767B` | Secondary text: handles, times, stats, hints |
-| `Accent` | `#3B4CCA` | The GFC accent (the share pages' colour): primary buttons, focused inputs |
-| `AccentText` | derived | `Accent` blended 45% toward white, for accent-coloured text (the brand, balance, creator links). `#3B4CCA` alone is too dark to read as text on black. |
+| `Accent` | `#1D9BF0` | Primary buttons, focused inputs, the active tab, links |
+| `AccentPressed` | `#1A8CD8` | Primary buttons when hovered or pressed |
+| `AccentText` | `#1D9BF0` | Accent-coloured text (the kind label, links); readable on black as it is |
+| `AccentTint` | `Accent` at 10% | Hover behind accent icons (composer tools, post actions) |
 | `Success` | `#00BA7C` | Success, rewards (incoming GFC), the verified badge |
 | `Danger` | `#F4212E` | Errors |
 | `Warning` | `#FFAD1F` | The wallet backup prompt (an outlined card and its button) |
+| `Gold` | `#FFC83D` | GFC amounts: balances, what a post earned, top earners |
+| `Like` | `#F91880` | A liked post's heart |
+| `SearchFill` | `#202327` | The rounded search boxes |
 
 Shapes: cards have 16 dp corners. Buttons are 24 dp pills: primary filled with `Accent`, secondary outlined
 with `Border`. Inputs are black with a `Border` outline that turns `Accent` on focus. Font: engine Roboto.
 
-The accent is deliberately GFC's own, not X's blue. The feed follows familiar social-feed conventions
-(avatar, name, @handle, time, content, a stats row), but doesn't use X's logo, name, icons or distinctive marks.
+The palette follows the familiar dark social-web palette (black, `#2F3336` lines, `#E7E9EA`/`#71767B` text,
+`#1D9BF0` accent), and the phone and desktop layouts share it. The feed follows familiar social-feed conventions
+(avatar, name, @handle, time, content, actions), but doesn't use any other platform's logo, name, icons or
+distinctive marks: the logo is GFC's own (white "GFC" on an accent circle, the same mark as the Windows app icon).
 
-**Icons:** milestone 1 uses text labels and letter avatars, so no icon assets are shipped yet. When icons are
+**Icons:** milestone 1 uses text labels, letter avatars and, on desktop, Unicode glyphs drawn with the engine's
+fonts (`GFCUI::Icon` in `GFCUIStyle.h`), so no icon assets are shipped yet. When icon assets are
 added, use an open-licensed set, imported as a font or SVG-derived textures, and record the license here:
 [Material Symbols](https://fonts.google.com/icons) (Apache License 2.0) or [Lucide](https://lucide.dev)
 (ISC License). Don't use X's or other platforms' icon sets.
@@ -118,6 +129,32 @@ Behaviour:
 - Leaving a screen calls its `OnScreenHidden`, which releases heavy content.
 - Deep links arriving while running open the seed (`FGFCDeepLink::OnSeedLink`). Seeds open without logging in;
   "Log in" from a seed returns to it afterwards.
+
+## Desktop layout
+
+In a window at least **1000 dp** wide (`GFCUI::Desktop::Breakpoint`) the root switches, live, to three columns
+centred in the window; narrower, it's the phone layout above (Android never reaches it). The packaged Windows
+app opens at 1280×800, which is the desktop layout. Preview it with `.\Scripts\Run.ps1 -Desktop -Width 1280 -Height 800`.
+
+| Column | Width | Contents |
+|---|---|---|
+| Left rail (`UGFCLeftRail`) | 260 dp | GFC logo (goes Home); Home, Explore, Bookmarks, Wallet, Profile (icon + label, the current page in bold); a full-width **Post** pill; the account (avatar, name, @handle) at the bottom, whose menu opens your posts or logs out. Logged out: Home, Explore and **Log in**. |
+| Centre | 600 dp | The active screen between two `Border` lines. The feed shows a header (the **For you** tab with an accent underline, or the page title; Explore adds a search box), then on For you the **composer** (avatar, "What's happening?", photo/video and 3D/file buttons, a **Post** pill), then the posts. |
+| Right rail (`UGFCRightRail`) | 350 dp, from 1240 dp | A rounded search box (opens Explore), **Your GFC** (the balance of your wallets on this device), **Trending on GFC** (the For you feed ranked by likes, then GFC earned, then views) and **Top earners** (`GET /podt/stats`: what the network paid creators, and the top wallets). |
+
+The phone's top bar, status line and bottom bar are hidden; status messages show as a toast at the bottom
+(accent, or `Danger` for errors) for a few seconds.
+
+Desktop feed pages (`EGFCFeedSource`): **For you** (`GET /feed`), **Explore** (`GET /search?q=`, or the most liked
+posts with no query), **Bookmarks** (`GET /bookmarks`), **Profile** (`GET /seeds/mine`).
+
+Desktop post actions (the card's action row, instead of the phone's stats line): **comments** (count; opens the
+post), **like** (`POST /seeds/{id}/like`, toggles; the heart turns `Like`), **views**, **GFC earned** (in `Gold`),
+**bookmark** (`POST /seeds/{id}/bookmark`, toggles) and **share** (copies the post's link). There is no repost
+or quote action: the node has no API for them, and no following feed or notifications, so those aren't shown.
+
+The composer hands its text to the create screen: **Post** uploads it as a text post there (with progress), and the
+photo or 3D buttons open the picker with the text already in place.
 
 ## Login (`GFCLoginScreen`)
 

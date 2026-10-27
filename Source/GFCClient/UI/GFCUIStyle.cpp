@@ -38,14 +38,17 @@ const FGFCTheme& FGFCTheme::Get()
 		T.Border = Hex(TEXT("2F3336"));
 		T.Text = Hex(TEXT("E7E9EA"));
 		T.TextSecondary = Hex(TEXT("71767B"));
-		T.Accent = Hex(TEXT("3B4CCA"));
-		T.AccentPressed = Hex(TEXT("2F3DA3"));
-		T.AccentText = FMath::Lerp(T.Accent, FLinearColor::White, 0.45f);
+		T.Accent = Hex(TEXT("1D9BF0"));
+		T.AccentPressed = Hex(TEXT("1A8CD8"));
+		T.AccentText = T.Accent;
+		T.AccentTint = T.Accent.CopyWithNewOpacity(0.1f);
 		T.Success = Hex(TEXT("00BA7C"));
 		T.Danger = Hex(TEXT("F4212E"));
 		T.Warning = Hex(TEXT("FFAD1F"));
 		T.Gold = Hex(TEXT("FFC83D"));
 		T.GoldDark = Hex(TEXT("B07A12"));
+		T.Like = Hex(TEXT("F91880"));
+		T.SearchFill = Hex(TEXT("202327"));
 		return T;
 	}();
 	return Theme;
@@ -90,6 +93,52 @@ namespace GFCUI
 		S.SetNormalPadding(FMargin(0.f));
 		S.SetPressedPadding(FMargin(0.f));
 		return S;
+	}
+
+	FButtonStyle GhostButtonStyle(const FLinearColor& Hover, float Radius)
+	{
+		FButtonStyle S;
+		S.SetNormal(FSlateRoundedBoxBrush(FLinearColor::Transparent, Radius));
+		S.SetHovered(FSlateRoundedBoxBrush(Hover, Radius));
+		S.SetPressed(FSlateRoundedBoxBrush(Hover, Radius));
+		S.SetDisabled(FSlateRoundedBoxBrush(FLinearColor::Transparent, Radius));
+		S.SetNormalPadding(FMargin(0.f));
+		S.SetPressedPadding(FMargin(0.f));
+		return S;
+	}
+
+	UWidget* MakeLogo(UWidgetTree* Tree, float Size)
+	{
+		const FGFCTheme& Th = FGFCTheme::Get();
+		USizeBox* Box = Tree->ConstructWidget<USizeBox>();
+		Box->SetWidthOverride(Size);
+		Box->SetHeightOverride(Size);
+		UBorder* Circle = Tree->ConstructWidget<UBorder>();
+		Circle->SetBrush(FSlateRoundedBoxBrush(Th.Accent, Size * 0.5f));
+		Circle->SetHorizontalAlignment(HAlign_Center);
+		Circle->SetVerticalAlignment(VAlign_Center);
+		Circle->SetPadding(FMargin(0.f));
+		UTextBlock* Mark = MakeText(Tree, LOCTEXT("LogoMark", "GFC"), FMath::Max(8, int32(Size * 0.3f)), FLinearColor::White, true);
+		Mark->SetAutoWrapText(false);
+		Circle->AddChild(Mark);
+		Box->AddChild(Circle);
+		return Box;
+	}
+
+	UEditableTextBox* MakeSearchBox(UWidgetTree* Tree, const FText& Hint)
+	{
+		const FGFCTheme& Th = FGFCTheme::Get();
+		UEditableTextBox* E = MakeInput(Tree, Hint);
+		FEditableTextBoxStyle Style = E->GetWidgetStyle();
+		FSlateFontInfo Font = Style.TextStyle.Font;
+		Font.Size = 15;
+		Style.SetFont(Font);
+		Style.SetPadding(FMargin(20.f, 11.f));
+		Style.SetBackgroundImageNormal(FSlateRoundedBoxBrush(Th.SearchFill, Th.PillRadius));
+		Style.SetBackgroundImageHovered(FSlateRoundedBoxBrush(Th.SearchFill, Th.PillRadius));
+		Style.SetBackgroundImageFocused(FSlateRoundedBoxBrush(Th.Background, Th.PillRadius, Th.Accent, 1.f));
+		E->SetWidgetStyle(Style);
+		return E;
 	}
 
 	UButton* MakeButton(UWidgetTree* Tree, const FText& Label, const FLinearColor& Color, UTextBlock** OutLabel)

@@ -4,6 +4,7 @@
 #         .\Scripts\Run.ps1 -Screen wallet                     (open on a screen: wallet, feed, seed:<id>)
 #         .\Scripts\Run.ps1 -Link "gfc://seed/<id>"            (test a deep link)
 #         .\Scripts\Run.ps1 -Desktop                           (desktop renderer instead of mobile ES3.1)
+#         .\Scripts\Run.ps1 -Desktop -Width 1280 -Height 800   (the desktop layout: landscape windows 1000 dp or wider)
 # The default window is the target phone (1080x2388) at 45% size, 486x1075, so it fits a 1152 px tall monitor: same aspect, and the same 443 dp
 # layout because UI scale follows the screen width. -Full opens it at 1080x2388 if your monitor is tall enough.
 # It renders with the mobile feature level.
