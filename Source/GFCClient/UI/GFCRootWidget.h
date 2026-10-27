@@ -88,5 +88,11 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UGFCScreenBase> ActiveScreen;
 
 	FDelegateHandle DeepLinkHandle;
+	TSharedPtr<class FGFCBackKey> BackKey;
+
+public:
+	/** Android Back: one screen back (feed, or login when logged out). Returns false on the feed/login, where Back does nothing. */
+	bool HandleBack();
+private:
 	bool bReturnToSeed = false;
 };

@@ -217,6 +217,9 @@ void UGFCLoginScreen::SwitchNode(const FString& Url)
 	{
 		return;
 	}
+	// A new node means a different account: don't carry the old name and password over.
+	if (UsernameBox) UsernameBox->SetText(FText::GetEmpty());
+	if (PasswordBox) PasswordBox->SetText(FText::GetEmpty());
 	if (A->SetNode(Url))
 	{
 		ShowStatus(FText::Format(LOCTEXT("NodeSet", "Using node {0}."), FText::FromString(A->GetClient()->GetBaseUrl())));

@@ -98,7 +98,7 @@ void UGFCWalletScreen::BuildDefaultLayout()
 		UVerticalBox* Col = Section(T, Left, LOCTEXT("YourWallet", "Balance"));
 		WalletPicker = T->ConstructWidget<UComboBoxString>();
 		StyleComboBox(WalletPicker);
-		NoWalletText = MakeText(T, LOCTEXT("NoWallet", "You don't have a wallet on this device yet. Create one below."), 12, TextDim);
+		NoWalletText = MakeText(T, LOCTEXT("NoWallet", "You don't have a wallet on this device yet. Create one above."), 12, TextDim);
 		AddV(Col, NoWalletText, 6.f);
 		AddV(Col, WalletPicker, 12.f);
 		BalanceText = MakeText(T, FText::GetEmpty(), 36, AccentText, true);

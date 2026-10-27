@@ -10,6 +10,9 @@
 #include "Components/VerticalBox.h"
 #include "Components/WidgetSwitcher.h"
 #include "Components/WidgetSwitcherSlot.h"
+#include "Framework/Application/IInputProcessor.h"
+#include "Framework/Application/SlateApplication.h"
+#include "InputCoreTypes.h"
 #include "GFCApiClient.h"
 #include "GFCApiSubsystem.h"
 #include "GFCDeepLink.h"
@@ -23,6 +26,28 @@
 #include "UI/GFCWalletScreen.h"
 
 #define LOCTEXT_NAMESPACE "GFCRoot"
+
+/** Sees the Android Back key before anything else, wherever focus is, and turns it into navigation. */
+class FGFCBackKey : public IInputProcessor
+{
+public:
+	TWeakObjectPtr<UGFCRootWidget> Root;
+	virtual void Tick(const float, FSlateApplication&, TSharedRef<ICursor>) override {}
+	virtual bool HandleKeyDownEvent(FSlateApplication&, const FKeyEvent& Event) override
+	{
+		if (Event.GetKey() == EKeys::Android_Back && Root.IsValid())
+		{
+			Root->HandleBack();
+			return true; // always handled: unhandled, the engine dims the app
+		}
+		return false;
+	}
+	virtual bool HandleKeyUpEvent(FSlateApplication&, const FKeyEvent& Event) override
+	{
+		return Event.GetKey() == EKeys::Android_Back;
+	}
+	virtual const TCHAR* GetDebugName() const override { return TEXT("GFCBackKey"); }
+};
 
 using namespace GFCUI;
 
@@ -70,6 +95,12 @@ void UGFCRootWidget::NativeOnInitialized()
 	UGFCApiSubsystem* Api = GetGameInstance()->GetSubsystem<UGFCApiSubsystem>();
 	Api->OnSessionChanged.AddDynamic(this, &ThisClass::HandleSessionChanged);
 	DeepLinkHandle = FGFCDeepLink::OnSeedLink.AddUObject(this, &UGFCRootWidget::HandleDeepLink);
+	if (FSlateApplication::IsInitialized())
+	{
+		BackKey = MakeShared<FGFCBackKey>();
+		BackKey->Root = this;
+		FSlateApplication::Get().RegisterInputPreProcessor(BackKey);
+	}
 
 	// A link that launched the app wins; then a remembered session goes to the feed.
 	FGFCDeepLink::CollectLaunchLink();
@@ -92,6 +123,11 @@ void UGFCRootWidget::NativeOnInitialized()
 void UGFCRootWidget::NativeDestruct()
 {
 	FGFCDeepLink::OnSeedLink.Remove(DeepLinkHandle);
+	if (BackKey.IsValid() && FSlateApplication::IsInitialized())
+	{
+		FSlateApplication::Get().UnregisterInputPreProcessor(BackKey);
+	}
+	BackKey.Reset();
 	Super::NativeDestruct();
 }
 
@@ -113,6 +149,7 @@ void UGFCRootWidget::BuildDefaultLayout()
 	AddH(BarRow, MakeText(T, LOCTEXT("Brand", "GFC"), 22, AccentText, true), 12.f);
 	UserText = MakeText(T, FText::GetEmpty(), 12, TextDim);
 	UserText->SetAutoWrapText(false);
+	UserText->SetClipping(EWidgetClipping::ClipToBounds); // long names end at the Log out button
 	AddH(BarRow, UserText, 8.f, true);
 	LogoutButton = MakeButton(T, LOCTEXT("Logout", "Log out"), PanelRaised);
 	LoginNavButton = MakeButton(T, LOCTEXT("Login", "Log in"));
@@ -270,6 +307,16 @@ void UGFCRootWidget::GoBack()
 	{
 		ShowLogin();
 	}
+}
+
+bool UGFCRootWidget::HandleBack()
+{
+	if (ActiveScreen == FeedScreen || ActiveScreen == LoginScreen)
+	{
+		return false;
+	}
+	GoBack();
+	return true;
 }
 
 void UGFCRootWidget::HandleDeepLink(const FString& SeedId)
