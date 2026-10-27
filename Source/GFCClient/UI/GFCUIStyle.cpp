@@ -8,6 +8,7 @@
 #include "Components/ButtonSlot.h"
 #include "Components/ComboBoxString.h"
 #include "Components/EditableTextBox.h"
+#include "Components/MultiLineEditableTextBox.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/SizeBox.h"
@@ -43,6 +44,8 @@ const FGFCTheme& FGFCTheme::Get()
 		T.Success = Hex(TEXT("00BA7C"));
 		T.Danger = Hex(TEXT("F4212E"));
 		T.Warning = Hex(TEXT("FFAD1F"));
+		T.Gold = Hex(TEXT("FFC83D"));
+		T.GoldDark = Hex(TEXT("B07A12"));
 		return T;
 	}();
 	return Theme;
@@ -147,6 +150,28 @@ namespace GFCUI
 		Style.SetFocusedForegroundColor(FSlateColor(Th.Text));
 		Style.SetBackgroundColor(FSlateColor(FLinearColor::White));
 		E->SetWidgetStyle(Style);
+		return E;
+	}
+
+	UMultiLineEditableTextBox* MakeMultiLineInput(UWidgetTree* Tree, const FText& Hint)
+	{
+		const FGFCTheme& Th = FGFCTheme::Get();
+		UMultiLineEditableTextBox* E = Tree->ConstructWidget<UMultiLineEditableTextBox>();
+		E->SetHintText(Hint);
+		FEditableTextBoxStyle Style = E->WidgetStyle;
+		FSlateFontInfo Font = Style.TextStyle.Font;
+		Font.Size = 17;
+		Style.SetFont(Font);
+		Style.SetPadding(FMargin(14.f, 12.f));
+		Style.SetBackgroundImageNormal(FSlateRoundedBoxBrush(Th.Background, 8.f, Th.Border, 1.f));
+		Style.SetBackgroundImageHovered(FSlateRoundedBoxBrush(Th.Background, 8.f, Th.TextSecondary, 1.f));
+		Style.SetBackgroundImageFocused(FSlateRoundedBoxBrush(Th.Background, 8.f, Th.Accent, 2.f));
+		Style.SetBackgroundImageReadOnly(FSlateRoundedBoxBrush(Th.Surface, 8.f, Th.Border, 1.f));
+		Style.SetForegroundColor(FSlateColor(Th.Text));
+		Style.SetFocusedForegroundColor(FSlateColor(Th.Text));
+		Style.SetBackgroundColor(FSlateColor(FLinearColor::White));
+		E->WidgetStyle = Style;
+		E->SetAutoWrapText(true);
 		return E;
 	}
 

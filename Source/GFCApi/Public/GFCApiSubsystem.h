@@ -44,6 +44,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "GFC|Wallet")
 	void MarkWalletsBackedUp();
 
+	/** Records the balance the user has now seen for one of their wallets. */
+	void NoteBalance(const FString& WalletId, int64 Cents);
+
+	/**
+	 * Fetches every known wallet's balance and reports how much they went up since the user last
+	 * saw them (0 when nothing rose, or on the first look). The new balances count as seen.
+	 */
+	void CheckEarnings(TFunction<void(int64 EarnedCents)> Done);
+
+	/** What a wallet earned between two sightings: never negative, 0 on the first sighting (LastSeen -1). */
+	static int64 EarnedSince(int64 LastSeenCents, int64 NowCents);
+
 	/** True when the user has a wallet that isn't in a backup yet: show the backup prompt. */
 	UFUNCTION(BlueprintPure, Category = "GFC|Wallet")
 	bool NeedsBackup() const;

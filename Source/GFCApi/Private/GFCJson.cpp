@@ -329,6 +329,8 @@ bool FGFCJson::ParseUploadResult(const FString& Body, FGFCUploadResult& Out)
 	}
 	Out.bRewardsEnabled = Bool(Obj, TEXT("rewards_enabled"));
 	Out.RepostOf = Out.Seed.RepostOf;
+	Out.FirstPostBonus = FMath::Max(0.0, Num(Obj, TEXT("first_post_bonus")));
+	Out.bFirstPostBonusPending = Bool(Obj, TEXT("first_post_bonus_pending"));
 	return !Out.Seed.Id.IsEmpty();
 }
 

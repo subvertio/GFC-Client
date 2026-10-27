@@ -105,6 +105,15 @@
 	{
 		try
 		{
+			if (source == 3)
+			{
+				// Any file (3D models, audio): the system file browser, no permission needed.
+				android.content.Intent open = new android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT);
+				open.addCategory(android.content.Intent.CATEGORY_OPENABLE);
+				open.setType("*/*");
+				startActivityForResult(open, GFC_REQ_PICK);
+				return;
+			}
 			if (source == 2)
 			{
 				android.content.Intent pick;
@@ -195,6 +204,8 @@
 			android.database.Cursor c = resolver.query(uri, new String[] { android.provider.OpenableColumns.DISPLAY_NAME }, null, null, null);
 			if (c != null) { if (c.moveToFirst() && c.getString(0) != null) name = c.getString(0); c.close(); }
 			String ext = mime.startsWith("video/") ? ".mp4" : (mime.equals("image/png") ? ".png" : (mime.startsWith("image/") ? ".jpg" : ".bin"));
+			int dot = name.lastIndexOf('.');
+			if (dot >= 0 && name.length() - dot <= 6) ext = name.substring(dot).toLowerCase(); // keep .glb, .gltf, .mp3 ...
 			if (name.lastIndexOf('.') < 0) name = name + ext;
 			java.io.File dir = new java.io.File(getCacheDir(), "GFCCache");
 			dir.mkdirs();

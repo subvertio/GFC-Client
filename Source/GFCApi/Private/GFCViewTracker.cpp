@@ -67,6 +67,7 @@ bool FGFCViewTracker::Tick(float DeltaSeconds, bool bVisible, bool bLoaded)
 	switch (Kind)
 	{
 	case EGFCMediaKind::Image:
+	case EGFCMediaKind::Text: // read like an image: on screen long enough
 		return VisibleSeconds >= Rules.ImageSeconds && Qualify();
 	case EGFCMediaKind::Model3D:
 		return VisibleSeconds >= Rules.ModelSeconds && Qualify();

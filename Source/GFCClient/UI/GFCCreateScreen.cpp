@@ -1,10 +1,11 @@
-#include "UI/GFCCreateScreen.h"
+﻿#include "UI/GFCCreateScreen.h"
 
 #include "Blueprint/WidgetTree.h"
 #include "Containers/Ticker.h"
 #include "Components/Border.h"
 #include "Components/Button.h"
 #include "Components/EditableTextBox.h"
+#include "Components/MultiLineEditableTextBox.h"
 #include "Components/Image.h"
 #include "Components/ProgressBar.h"
 #include "Components/ScaleBox.h"
@@ -18,7 +19,10 @@
 #include "GFCUpload.h"
 #include "HAL/FileManager.h"
 #include "Misc/FileHelper.h"
+#include "Misc/Guid.h"
 #include "Misc/Paths.h"
+#include "GFCApiSubsystem.h"
+#include "UI/GFCRewardBurst.h"
 #include "UI/GFCRootWidget.h"
 #include "UI/GFCUIStyle.h"
 
@@ -45,19 +49,31 @@ void UGFCCreateScreen::BuildDefaultLayout()
 	UVerticalBox* Col = MakeColumn(T);
 	Scroll->AddChild(Col);
 
-	AddV(Col, MakeText(T, LOCTEXT("Title", "Post"), 22, Text, true), 4.f);
-	AddV(Col, MakeText(T, LOCTEXT("Sub", "Share a photo, a video, audio or a 3D model. What you capture here is saved to your phone's gallery and stays yours."), 13, TextDim), 14.f);
+	// Top to bottom, in the order you do it: write, add media (optional), title, post.
+	AddV(Col, MakeText(T, LOCTEXT("Title", "Post"), 22, Text, true), 12.f);
 
+	BodyBox = MakeMultiLineInput(T, LOCTEXT("BodyHint", "What's on your mind?"));
+	USizeBox* BodySize = T->ConstructWidget<USizeBox>();
+	BodySize->SetMinDesiredHeight(120.f);
+	BodySize->SetMaxDesiredHeight(260.f);
+	BodySize->AddChild(BodyBox);
+	AddV(Col, BodySize, 14.f);
+
+	AddV(Col, MakeText(T, LOCTEXT("AddL", "Add to your post (optional). What you capture here is saved to your phone's gallery and stays yours."), 12, TextDim), 8.f);
 	PhotoButton = MakeButton(T, LOCTEXT("Photo", "Take a photo"), PanelRaised);
 	VideoButton = MakeButton(T, LOCTEXT("Video", "Record a video"), PanelRaised);
 	GalleryButton = MakeButton(T, LOCTEXT("Gallery", "Choose from gallery"), PanelRaised);
+	FileButton = MakeButton(T, LOCTEXT("File", "3D model or other file"), PanelRaised);
 	AddV(Col, PhotoButton, 8.f);
 	AddV(Col, VideoButton, 8.f);
-	AddV(Col, GalleryButton, 18.f);
+	AddV(Col, GalleryButton, 8.f);
+	AddV(Col, FileButton, 14.f);
 
 	UBorder* Form = MakeCard(T, FMargin(16.f));
 	UVerticalBox* F = MakeColumn(T);
 	Form->AddChild(F);
+
+	UVerticalBox* M = MakeColumn(T);
 
 	USizeBox* PreviewBox = T->ConstructWidget<USizeBox>();
 	PreviewBox->SetHeightOverride(200.f);
@@ -69,14 +85,16 @@ void UGFCCreateScreen::BuildDefaultLayout()
 	Fit->AddChild(PreviewImage);
 	PreviewBg->AddChild(Fit);
 	PreviewBox->AddChild(PreviewBg);
-	AddV(F, PreviewBox, 8.f);
+	AddV(M, PreviewBox, 8.f);
 	FileText = MakeText(T, FText::GetEmpty(), 12, TextDim);
-	AddV(F, FileText, 12.f);
+	AddV(M, FileText, 8.f);
+	RemoveMediaButton = MakeButton(T, LOCTEXT("Remove", "Remove"), PanelRaised);
+	AddV(M, RemoveMediaButton, 14.f);
+	MediaPanel = M;
+	AddV(F, M, 0.f);
 
-	TitleBox = MakeInput(T, LOCTEXT("TitleHint", "Give it a title"));
-	DescriptionBox = MakeInput(T, LOCTEXT("DescHint", "Say something about it (optional)"));
-	AddV(F, MakeField(T, LOCTEXT("TitleL", "Title"), TitleBox), 10.f);
-	AddV(F, MakeField(T, LOCTEXT("DescL", "Description"), DescriptionBox), 14.f);
+	TitleBox = MakeInput(T, LOCTEXT("TitleHint", "Title (optional for text)"));
+	AddV(F, MakeField(T, LOCTEXT("TitleL", "Title"), TitleBox), 14.f);
 
 	PostButton = MakeButton(T, LOCTEXT("Post", "Post"));
 	AddV(F, PostButton, 10.f);
@@ -93,7 +111,6 @@ void UGFCCreateScreen::BuildDefaultLayout()
 	ViewPostButton = MakeButton(T, LOCTEXT("ViewPost", "View your post"), PanelRaised);
 	AddV(F, ViewPostButton, 0.f);
 
-	FormPanel = Form;
 	AddV(Col, Form, 0.f);
 }
 
@@ -102,6 +119,9 @@ void UGFCCreateScreen::BindEvents()
 	if (PhotoButton) PhotoButton->OnClicked.AddDynamic(this, &ThisClass::HandlePhoto);
 	if (VideoButton) VideoButton->OnClicked.AddDynamic(this, &ThisClass::HandleVideo);
 	if (GalleryButton) GalleryButton->OnClicked.AddDynamic(this, &ThisClass::HandleGallery);
+	if (FileButton) FileButton->OnClicked.AddDynamic(this, &ThisClass::HandleFile);
+	if (RemoveMediaButton) RemoveMediaButton->OnClicked.AddDynamic(this, &ThisClass::HandleRemoveMedia);
+	if (BodyBox) BodyBox->OnTextChanged.AddDynamic(this, &ThisClass::HandleBodyChanged);
 	if (PostButton) PostButton->OnClicked.AddDynamic(this, &ThisClass::HandlePost);
 	if (CancelButton) CancelButton->OnClicked.AddDynamic(this, &ThisClass::HandleCancel);
 	if (ViewPostButton) ViewPostButton->OnClicked.AddDynamic(this, &ThisClass::HandleViewPost);
@@ -112,9 +132,11 @@ void UGFCCreateScreen::OnScreenShown()
 	// The camera lives in the phone app; on PC only the file picker is offered.
 	if (PhotoButton) PhotoButton->SetIsEnabled(FGFCMediaCapture::IsSupported(EGFCCaptureSource::Photo));
 	if (VideoButton) VideoButton->SetIsEnabled(FGFCMediaCapture::IsSupported(EGFCCaptureSource::Video));
-	if (!Job.IsValid() && Chosen.Path.IsEmpty())
+	if (FileButton) FileButton->SetIsEnabled(FGFCMediaCapture::IsSupported(EGFCCaptureSource::File));
+	if (!Job.IsValid())
 	{
-		if (FormPanel) FormPanel->SetVisibility(ESlateVisibility::Collapsed);
+		ShowMediaPanel();
+		SetUploading(false);
 	}
 	Super::OnScreenShown();
 }
@@ -129,6 +151,55 @@ void UGFCCreateScreen::NativeDestruct()
 void UGFCCreateScreen::HandlePhoto() { Choose(EGFCCaptureSource::Photo); }
 void UGFCCreateScreen::HandleVideo() { Choose(EGFCCaptureSource::Video); }
 void UGFCCreateScreen::HandleGallery() { Choose(EGFCCaptureSource::Gallery); }
+void UGFCCreateScreen::HandleFile() { Choose(EGFCCaptureSource::File); }
+
+void UGFCCreateScreen::HandleRemoveMedia()
+{
+	if (Job.IsValid()) return;
+	DiscardMedia();
+	PreviewTexture = nullptr;
+	ShowMediaPanel();
+	UpdatePostEnabled();
+}
+
+void UGFCCreateScreen::HandleBodyChanged(const FText& NewText)
+{
+	if (NewText.ToString().Len() > MaxBodyChars && BodyBox)
+	{
+		BodyBox->SetText(FText::FromString(NewText.ToString().Left(MaxBodyChars)));
+	}
+	UpdatePostEnabled();
+}
+
+void UGFCCreateScreen::ShowMediaPanel()
+{
+	if (MediaPanel) MediaPanel->SetVisibility(Chosen.Path.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+}
+
+void UGFCCreateScreen::UpdatePostEnabled()
+{
+	const bool bHasText = BodyBox && !BodyBox->GetText().ToString().TrimStartAndEnd().IsEmpty();
+	const bool bTooBig = !Chosen.Path.IsEmpty() && Chosen.Size + 64 * 1024 > UGFCApiClient::MaxUploadBytes;
+	if (PostButton) PostButton->SetIsEnabled(!bTooBig && (bHasText || !Chosen.Path.IsEmpty()));
+}
+
+FString UGFCCreateScreen::TitleFromBody(const FString& Body)
+{
+	FString Line = Body.TrimStartAndEnd();
+	int32 Nl;
+	if (Line.FindChar(TEXT('\n'), Nl)) Line.LeftInline(Nl);
+	Line.TrimEndInline();
+	if (Line.Len() > 80) Line = Line.Left(79).TrimEnd() + TEXT("\u2026");
+	return Line;
+}
+
+FString UGFCCreateScreen::WriteTextSeed(const FString& Body)
+{
+	const FString Dir = FPaths::Combine(UGFCCacheSubsystem::GetCacheRoot(), TEXT("outbox"));
+	IFileManager::Get().MakeDirectory(*Dir, true);
+	const FString Path = FPaths::Combine(Dir, FString::Printf(TEXT("text-%s.txt"), *FGuid::NewGuid().ToString(EGuidFormats::Digits).ToLower()));
+	return FFileHelper::SaveStringToFile(Body, *Path, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM) ? Path : FString();
+}
 
 void UGFCCreateScreen::Choose(EGFCCaptureSource Source)
 {
@@ -172,12 +243,12 @@ void UGFCCreateScreen::OnChosen(const FGFCCapturedMedia& Media)
 {
 	DiscardMedia();
 	Chosen = Media;
-	if (FormPanel) FormPanel->SetVisibility(ESlateVisibility::Visible);
+	ShowMediaPanel();
 	if (ResultText) ResultText->SetText(FText::GetEmpty());
 	if (ViewPostButton) ViewPostButton->SetVisibility(ESlateVisibility::Collapsed);
 	if (UploadProgress) UploadProgress->SetPercent(0.f);
 	if (ProgressText) ProgressText->SetText(FText::GetEmpty());
-	if (TitleBox && TitleBox->GetText().IsEmpty())
+	if (TitleBox && TitleBox->GetText().IsEmpty() && (!BodyBox || BodyBox->GetText().IsEmpty()))
 	{
 		TitleBox->SetText(FText::FromString(FPaths::GetBaseFilename(Media.FileName)));
 	}
@@ -185,7 +256,7 @@ void UGFCCreateScreen::OnChosen(const FGFCCapturedMedia& Media)
 	const bool bTooBig = Media.Size + 64 * 1024 > UGFCApiClient::MaxUploadBytes;
 	if (FileText)
 	{
-		FText Info = FText::Format(LOCTEXT("FileInfo", "{0} · {1}"), FText::FromString(Media.FileName), Size(Media.Size));
+		FText Info = FText::Format(LOCTEXT("FileInfo", "{0} Â· {1}"), FText::FromString(Media.FileName), Size(Media.Size));
 		if (Media.bSavedToGallery)
 		{
 			Info = FText::Format(LOCTEXT("Saved", "{0}\nSaved to your gallery."), Info);
@@ -197,7 +268,7 @@ void UGFCCreateScreen::OnChosen(const FGFCCapturedMedia& Media)
 		FileText->SetText(Info);
 		FileText->SetColorAndOpacity(FSlateColor(bTooBig ? Danger : TextDim));
 	}
-	if (PostButton) PostButton->SetIsEnabled(!bTooBig);
+	UpdatePostEnabled();
 
 	// Preview: the device's video thumbnail, or the image itself (downscaled).
 	PreviewTexture = nullptr;
@@ -231,25 +302,52 @@ void UGFCCreateScreen::SetUploading(bool bUploading)
 	if (PostButton) PostButton->SetVisibility(bUploading ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
 	if (CancelButton) CancelButton->SetVisibility(bUploading ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	if (UploadProgress) UploadProgress->SetVisibility(bUploading ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-	for (UButton* B : {PhotoButton.Get(), VideoButton.Get(), GalleryButton.Get()})
+	const TPair<UButton*, EGFCCaptureSource> Sources[] = {{PhotoButton.Get(), EGFCCaptureSource::Photo},
+		{VideoButton.Get(), EGFCCaptureSource::Video}, {GalleryButton.Get(), EGFCCaptureSource::Gallery}, {FileButton.Get(), EGFCCaptureSource::File}};
+	for (const auto& S : Sources)
 	{
-		if (B) B->SetIsEnabled(!bUploading && (B == GalleryButton.Get() || FGFCMediaCapture::IsSupported(EGFCCaptureSource::Photo)));
+		if (S.Key) S.Key->SetIsEnabled(!bUploading && FGFCMediaCapture::IsSupported(S.Value));
 	}
+	if (RemoveMediaButton) RemoveMediaButton->SetIsEnabled(!bUploading);
+	if (BodyBox) BodyBox->SetIsReadOnly(bUploading);
+	if (!bUploading) UpdatePostEnabled();
 }
 
 void UGFCCreateScreen::HandlePost()
 {
 	UGFCApiClient* C = Client();
-	if (!C || Chosen.Path.IsEmpty() || Job.IsValid())
+	const FString Body = BodyBox ? BodyBox->GetText().ToString().TrimStartAndEnd() : FString();
+	if (!C || Job.IsValid() || (Chosen.Path.IsEmpty() && Body.IsEmpty()))
 	{
 		return;
+	}
+	if (Chosen.Path.IsEmpty())
+	{
+		// Just text: the post is a small .txt seed; the text itself travels as the description.
+		FGFCCapturedMedia TextSeed;
+		TextSeed.Path = WriteTextSeed(Body);
+		if (TextSeed.Path.IsEmpty())
+		{
+			ShowStatus(LOCTEXT("TextWriteFailed", "Couldn't prepare the post. Check the phone has free space."), true);
+			return;
+		}
+		TextSeed.FileName = TEXT("post.txt");
+		TextSeed.MimeType = TEXT("text/plain");
+		TextSeed.Size = IFileManager::Get().FileSize(*TextSeed.Path);
+		TextSeed.bIsAppCopy = true;
+		Chosen = TextSeed;
+		bTextFile = true;
 	}
 	FGFCUploadRequest Req;
 	Req.FilePath = Chosen.Path;
 	Req.FileName = Chosen.FileName;
 	Req.MimeType = Chosen.MimeType;
 	Req.Title = TitleBox ? TitleBox->GetText().ToString().TrimStartAndEnd() : FString();
-	Req.Description = DescriptionBox ? DescriptionBox->GetText().ToString().TrimStartAndEnd() : FString();
+	if (Req.Title.IsEmpty() && bTextFile)
+	{
+		Req.Title = TitleFromBody(Body);
+	}
+	Req.Description = Body;
 	if (!Chosen.ThumbnailPath.IsEmpty())
 	{
 		FFileHelper::LoadFileToArray(Req.ThumbnailJpeg, *Chosen.ThumbnailPath);
@@ -278,6 +376,10 @@ void UGFCCreateScreen::HandlePost()
 			if (!WeakThis.IsValid()) return;
 			const int32 Attempts = WeakThis->Job.IsValid() ? WeakThis->Job->GetAttempt() : 1;
 			WeakThis->Job.Reset();
+			if (!R.bOk && WeakThis->bTextFile)
+			{
+				WeakThis->DiscardMedia(); // a retry writes a fresh text seed from the box
+				}
 			WeakThis->SetUploading(false);
 			if (!R.bOk)
 			{
@@ -297,6 +399,17 @@ void UGFCCreateScreen::HandlePost()
 				Message = FText::Format(LOCTEXT("Repost", "{0}\nThis looks like a repost of @{1}. They'll get the credit."),
 					Message, FText::FromString(Result.RepostOf.Owner));
 			}
+			else if (Result.FirstPostBonus > 0.0)
+			{
+				Message = FText::Format(LOCTEXT("Bonus", "{0}\nYou earned {1} GFC for your first post!"), Message, FText::AsNumber(Result.FirstPostBonus));
+				UGFCRewardBurst::Play(WeakThis.Get(), Result.FirstPostBonus, LOCTEXT("BonusCaption", "First post bonus!"));
+				// The bonus is celebrated now: count the new balance as seen so login doesn't repeat it.
+				WeakThis->GetGameInstance()->GetSubsystem<UGFCApiSubsystem>()->CheckEarnings([](int64) {});
+			}
+			else if (Result.bFirstPostBonusPending)
+			{
+				Message = FText::Format(LOCTEXT("BonusPending", "{0}\nCreate a wallet to collect your first-post bonus."), Message);
+			}
 			else if (!Result.bRewardsEnabled)
 			{
 				Message = FText::Format(LOCTEXT("NoRewards", "{0}\nCreate a wallet so your posts can earn GFC."), Message);
@@ -309,6 +422,9 @@ void UGFCCreateScreen::HandlePost()
 			if (WeakThis->ViewPostButton) WeakThis->ViewPostButton->SetVisibility(ESlateVisibility::Visible);
 			if (WeakThis->PostButton) WeakThis->PostButton->SetVisibility(ESlateVisibility::Collapsed);
 			WeakThis->DiscardMedia(); // the app's copy goes; the gallery copy stays the user's
+			WeakThis->ShowMediaPanel();
+				if (WeakThis->BodyBox) WeakThis->BodyBox->SetText(FText::GetEmpty());
+				if (WeakThis->TitleBox) WeakThis->TitleBox->SetText(FText::GetEmpty());
 		});
 }
 
@@ -346,6 +462,7 @@ void UGFCCreateScreen::DiscardMedia()
 		}), 1.f);
 	}
 	Chosen = FGFCCapturedMedia();
+	bTextFile = false;
 }
 
 #undef LOCTEXT_NAMESPACE

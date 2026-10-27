@@ -22,6 +22,8 @@
 #include "UI/GFCFeedScreen.h"
 #include "UI/GFCLoginScreen.h"
 #include "UI/GFCSeedDetailScreen.h"
+#include "GFCApi.h"
+#include "UI/GFCRewardBurst.h"
 #include "UI/GFCUIStyle.h"
 #include "UI/GFCWalletScreen.h"
 
@@ -116,6 +118,10 @@ void UGFCRootWidget::NativeOnInitialized()
 	else if (!OpenStartScreenFromCommandLine())
 	{
 		ShowFeed();
+	}
+	if (Api->GetClient()->IsLoggedIn())
+	{
+		AnnounceEarnings(); // a remembered session is a login too
 	}
 	ShowStatus(FText::Format(LOCTEXT("Connected", "Node: {0}"), FText::FromString(Api->GetClient()->GetBaseUrl())));
 }
@@ -333,8 +339,22 @@ void UGFCRootWidget::ShowStatus(const FText& Message, bool bError)
 	}
 }
 
+void UGFCRootWidget::AnnounceEarnings()
+{
+	TWeakObjectPtr<UGFCRootWidget> WeakThis(this);
+	GetGameInstance()->GetSubsystem<UGFCApiSubsystem>()->CheckEarnings([WeakThis](int64 EarnedCents)
+	{
+		if (WeakThis.IsValid() && EarnedCents > 0)
+		{
+			UE_LOG(LogGFCApi, Log, TEXT("Earned since last login: %lld cents"), EarnedCents);
+			UGFCRewardBurst::Play(WeakThis.Get(), double(EarnedCents) / 100.0, LOCTEXT("Earned", "You earned GFC while you were away!"));
+		}
+	});
+}
+
 void UGFCRootWidget::OnLoggedIn(bool bNewAccount)
 {
+	AnnounceEarnings();
 	if (bReturnToSeed)
 	{
 		bReturnToSeed = false;

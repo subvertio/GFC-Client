@@ -18,6 +18,7 @@
 #include "GFCApiSubsystem.h"
 #include "GFCJson.h"
 #include "HAL/PlatformApplicationMisc.h"
+#include "UI/GFCRewardBurst.h"
 #include "UI/GFCUIStyle.h"
 
 #define LOCTEXT_NAMESPACE "GFCWallet"
@@ -260,6 +261,22 @@ void UGFCWalletScreen::RefreshSelected()
 		if (WeakThis->BalanceText)
 		{
 			WeakThis->BalanceText->SetText(FText::Format(LOCTEXT("Balance", "{0} GFC"), FText::FromString(FGFCJson::FormatCents(W.BalanceCents))));
+		}
+		if (UGFCApiSubsystem* A = WeakThis->GetGameInstance()->GetSubsystem<UGFCApiSubsystem>())
+		{
+			// Seen here, so it isn't announced again at the next login. A rise while the user
+			// wasn't looking (rewards, a bonus) still gets the burst.
+			int64 LastSeen = -1;
+			for (const FGFCKnownWallet& K : A->GetKnownWallets())
+			{
+				if (K.WalletId == Id) LastSeen = K.LastSeenCents;
+			}
+			const int64 Earned = UGFCApiSubsystem::EarnedSince(LastSeen, W.BalanceCents);
+			A->NoteBalance(Id, W.BalanceCents);
+			if (Earned > 0)
+			{
+				UGFCRewardBurst::Play(WeakThis.Get(), double(Earned) / 100.0, LOCTEXT("EarnedHere", "You earned GFC!"));
+			}
 		}
 	});
 	C->GetHistory(Id, [WeakThis, Id](const FGFCApiResult& R, const TArray<FGFCTransaction>& Txs)

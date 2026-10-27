@@ -56,6 +56,9 @@ public:
 	/** After login or register. New accounts go to the wallet screen to create a first wallet. */
 	void OnLoggedIn(bool bNewAccount);
 
+	/** If the user's wallets went up since they last looked, plays the coin burst with the amount. */
+	void AnnounceEarnings();
+
 protected:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeDestruct() override;

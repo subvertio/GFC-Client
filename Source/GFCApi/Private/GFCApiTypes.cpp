@@ -23,6 +23,10 @@ EGFCMediaKind FGFCSeed::GetMediaKind() const
 	{
 		return EGFCMediaKind::Audio;
 	}
+	if (C == TEXT("text") || C.StartsWith(TEXT("text/")))
+	{
+		return EGFCMediaKind::Text;
+	}
 
 	const FString Ext = FPaths::GetExtension(Full, false).ToLower();
 	static const TSet<FString> Model{TEXT("glb"), TEXT("gltf"), TEXT("fbx"), TEXT("obj"), TEXT("usdz"), TEXT("stl"), TEXT("3ds")};
@@ -33,5 +37,6 @@ EGFCMediaKind FGFCSeed::GetMediaKind() const
 	if (Image.Contains(Ext)) return EGFCMediaKind::Image;
 	if (Video.Contains(Ext)) return EGFCMediaKind::Video;
 	if (Audio.Contains(Ext)) return EGFCMediaKind::Audio;
+	if (Ext == TEXT("txt") || Ext == TEXT("md")) return EGFCMediaKind::Text;
 	return EGFCMediaKind::Other;
 }

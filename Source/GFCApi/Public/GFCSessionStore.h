@@ -17,6 +17,9 @@ struct GFCAPI_API FGFCKnownWallet
 
 	/** Set once the user exported a backup that includes this wallet. */
 	UPROPERTY(SaveGame, BlueprintReadOnly, Category = "GFC") bool bBackedUp = false;
+
+	/** The balance the user last saw, in cents; -1 until the app has seen it once. Drives "you earned" on login. */
+	UPROPERTY(SaveGame, BlueprintReadOnly, Category = "GFC") int64 LastSeenCents = -1;
 };
 
 /**

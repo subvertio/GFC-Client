@@ -44,6 +44,10 @@ public:
 	/** The cache owner key for this card: "card:<seed id>". */
 	FString OwnerKey() const { return TEXT("card:") + Seed.Id; }
 	FString ThumbUrl() const;
+public:
+	/** The card's text: Description trimmed and cut at MaxChars with an ellipsis (tap for the rest). */
+	static FString FeedBody(const FString& Description, int32 MaxChars);
+private:
 
 protected:
 	virtual void NativeOnInitialized() override;
@@ -52,6 +56,10 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidget)) TObjectPtr<UButton> CardButton;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidget)) TObjectPtr<UImage> ThumbImage;
+	/** The post's text: a text post's whole body, or a caption (shortened in the feed). */
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> BodyText;
+	/** The media frame around ThumbImage; collapsed for text posts. */
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UWidget> MediaFrame;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidget)) TObjectPtr<UTextBlock> TitleText;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidget)) TObjectPtr<UTextBlock> OwnerText;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> MetaText;

@@ -139,6 +139,57 @@ void UGFCApiSubsystem::RememberWallet(const FString& WalletId, const FString& Na
 	Persist();
 }
 
+int64 UGFCApiSubsystem::EarnedSince(int64 LastSeenCents, int64 NowCents)
+{
+	return LastSeenCents >= 0 && NowCents > LastSeenCents ? NowCents - LastSeenCents : 0;
+}
+
+void UGFCApiSubsystem::NoteBalance(const FString& WalletId, int64 Cents)
+{
+	for (FGFCKnownWallet& W : Save->KnownWallets)
+	{
+		if (W.WalletId == WalletId && W.Owner.Equals(Client->GetUsername(), ESearchCase::IgnoreCase)
+			&& W.NodeBaseUrl == Client->GetBaseUrl() && W.LastSeenCents != Cents)
+		{
+			W.LastSeenCents = Cents;
+			Persist();
+			return;
+		}
+	}
+}
+
+void UGFCApiSubsystem::CheckEarnings(TFunction<void(int64 EarnedCents)> Done)
+{
+	const TArray<FGFCKnownWallet> Wallets = GetKnownWallets();
+	if (Wallets.IsEmpty() || !Client->IsLoggedIn())
+	{
+		Done(0);
+		return;
+	}
+	struct FTally { int32 Pending = 0; int64 Earned = 0; TFunction<void(int64)> Done; };
+	TSharedRef<FTally> Tally = MakeShared<FTally>();
+	Tally->Pending = Wallets.Num();
+	Tally->Done = MoveTemp(Done);
+	TWeakObjectPtr<UGFCApiSubsystem> WeakThis(this);
+	for (const FGFCKnownWallet& Known : Wallets)
+	{
+		const FString Id = Known.WalletId;
+		const int64 LastSeen = Known.LastSeenCents;
+		Client->GetWallet(Id, [WeakThis, Tally, Id, LastSeen](const FGFCApiResult& R, const FGFCWallet& W)
+		{
+			if (R.bOk && WeakThis.IsValid())
+			{
+				Tally->Earned += EarnedSince(LastSeen, W.BalanceCents);
+				WeakThis->NoteBalance(Id, W.BalanceCents);
+			}
+			if (--Tally->Pending == 0 && WeakThis.IsValid())
+			{
+				Tally->Done(Tally->Earned);
+			}
+		});
+	}
+}
+
 void UGFCApiSubsystem::ForgetWallet(const FString& WalletId)
 {
 	Save->KnownWallets.RemoveAll([&](const FGFCKnownWallet& W)

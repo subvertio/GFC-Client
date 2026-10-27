@@ -20,6 +20,7 @@
 #include "GFCCacheSubsystem.h"
 #include "MediaTexture.h"
 #include "Viewer/GFCMediaSession.h"
+#include "UI/GFCCreateScreen.h"
 #include "UI/GFCUIStyle.h"
 
 #define LOCTEXT_NAMESPACE "GFCSeedCard"
@@ -34,6 +35,7 @@ FText GFCMediaKindLabel(EGFCMediaKind Kind)
 	case EGFCMediaKind::Image: return LOCTEXT("Image", "Image");
 	case EGFCMediaKind::Video: return LOCTEXT("Video", "Video");
 	case EGFCMediaKind::Audio: return LOCTEXT("Audio", "Audio");
+	case EGFCMediaKind::Text: return LOCTEXT("Text", "Text");
 	default: return LOCTEXT("Other", "File");
 	}
 }
@@ -146,7 +148,9 @@ void UGFCSeedCard::BuildDefaultLayout()
 	AddV(Body, RepostText, 2.f);
 
 	TitleText = MakeText(T, FText::GetEmpty(), 15, GFCUI::Text);
-	AddV(Body, TitleText, 10.f);
+	AddV(Body, TitleText, 6.f);
+	BodyText = MakeText(T, FText::GetEmpty(), 15, GFCUI::Text);
+	AddV(Body, BodyText, 10.f);
 
 	// Media frame: the thumbnail (or inline video), a tap target over it, and a sound toggle.
 	USizeBox* ThumbBox = T->ConstructWidget<USizeBox>();
@@ -194,6 +198,7 @@ void UGFCSeedCard::BuildDefaultLayout()
 	ThumbBg->AddChild(Over);
 	ThumbBox->AddChild(ThumbBg);
 	AddV(Body, ThumbBox, 10.f);
+	MediaFrame = ThumbBox;
 
 	UHorizontalBox* Stats = MakeRow(T);
 	KindText = MakeText(T, FText::GetEmpty(), 13, AccentText, true);
@@ -211,7 +216,20 @@ void UGFCSeedCard::SetSeed(const FGFCSeed& InSeed)
 		StopInline();
 	}
 	Seed = InSeed;
-	if (TitleText) TitleText->SetText(FText::FromString(Seed.Title));
+	const bool bText = Seed.GetMediaKind() == EGFCMediaKind::Text;
+	// A text post titled from its own first line shows the text once, not twice.
+	const bool bTitleRepeats = bText && UGFCCreateScreen::TitleFromBody(Seed.Description) == Seed.Title;
+	if (TitleText)
+	{
+		TitleText->SetText(FText::FromString(Seed.Title));
+		TitleText->SetVisibility(bTitleRepeats || Seed.Title.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+	}
+	if (BodyText)
+	{
+		BodyText->SetText(FText::FromString(FeedBody(Seed.Description, bText ? 600 : 200)));
+		BodyText->SetVisibility(Seed.Description.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+	}
+	if (MediaFrame) MediaFrame->SetVisibility(bText ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
 	const FString Owner = Seed.Owner.IsEmpty() ? FString(TEXT("unknown")) : Seed.Owner;
 	if (OwnerText) OwnerText->SetText(FText::FromString(Owner));
 	if (HandleText)
@@ -240,6 +258,16 @@ void UGFCSeedCard::SetSeed(const FGFCSeed& InSeed)
 	}
 	UpdateMediaControls();
 	RestoreContent();
+}
+
+FString UGFCSeedCard::FeedBody(const FString& Description, int32 MaxChars)
+{
+	FString S = Description.TrimStartAndEnd();
+	if (S.Len() > MaxChars)
+	{
+		S = S.Left(MaxChars - 1).TrimEnd() + TEXT("\u2026");
+	}
+	return S;
 }
 
 FString UGFCSeedCard::ThumbUrl() const

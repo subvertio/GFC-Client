@@ -9,6 +9,7 @@ class UBorder;
 class UButton;
 class UComboBoxString;
 class UEditableTextBox;
+class UMultiLineEditableTextBox;
 class UHorizontalBox;
 class UPanelWidget;
 class USizeBox;
@@ -37,6 +38,8 @@ struct GFCCLIENT_API FGFCTheme
 	FLinearColor Success;         // #00BA7C  success, rewards, verified
 	FLinearColor Danger;          // #F4212E  errors
 	FLinearColor Warning;         // #FFAD1F  the wallet backup prompt
+	FLinearColor Gold;            // #FFC83D  GFC coins and earnings
+	FLinearColor GoldDark;        // #B07A12  a coin's rim and stamp
 
 	float CornerRadius = 16.f;    // cards
 	float PillRadius = 24.f;      // buttons and inputs
@@ -76,6 +79,8 @@ namespace GFCUI
 
 	UEditableTextBox* MakeInput(UWidgetTree* Tree, const FText& Hint, bool bPassword = false);
 	void StyleComboBox(UComboBoxString* Combo);
+	/** A dark multi-line text box for writing posts. */
+	UMultiLineEditableTextBox* MakeMultiLineInput(UWidgetTree* Tree, const FText& Hint);
 
 	/** A flat area (no corners), e.g. the page background. */
 	UBorder* MakePanel(UWidgetTree* Tree, const FLinearColor& Color = Panel, const FMargin& Padding = FMargin(16.f));

@@ -7,6 +7,7 @@ enum class EGFCCaptureSource : uint8
 	Photo = 0,   // system camera, photo
 	Video = 1,   // system camera, video
 	Gallery = 2, // system photo picker (photos and videos)
+	File = 3,    // system file browser, any type (3D models, audio)
 };
 
 /** Media the user captured or picked, ready to post. */

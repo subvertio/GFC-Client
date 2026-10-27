@@ -156,7 +156,9 @@ views, likes and comments).
 |---|---|---|---|
 | `CardButton` | Button | yes | Opens the seed detail. Precise Tap, so swipes scroll. |
 | `ThumbImage` | Image | yes | From the cache; hidden until it arrives. |
-| `TitleText`, `OwnerText` | TextBlock | yes | "by {owner}". |
+| `TitleText`, `OwnerText` | TextBlock | yes | "by {owner}". The title hides on a text post titled from its own first line. |
+| `BodyText` | TextBlock | no | The description: a text post's text (up to 600 characters in the feed) or a caption (200). |
+| `MediaFrame` | any widget | no | The media frame; collapsed for text posts. |
 | `KindText`, `MetaText` | TextBlock | no | "3D model"; "N views  N likes  N comments". |
 | `HandleText` | TextBlock | no | "@owner · 3h". |
 | `AvatarSlot` | SizeBox | no | Holds the avatar (a letter for now; profile images later). |
@@ -180,7 +182,8 @@ Thumbnail first. On tap, the full content plays in the app.
 | `ModelView` | GFCModelView | no | The 3D view; created in code if absent. Drag: orbit. Pinch or wheel: zoom. Two fingers or right drag: pan. Double click: reset. |
 | `PreviewNote` | TextBlock | no | Over the preview: progress, gesture hints, errors such as "over the triangle limit". Its parent hides when empty. |
 | `OpenMediaButton` | Button | no | Only for kinds the app can't show ("Open the original file"). |
-| `OwnerText`, `DescriptionText`, `MetaText`, `ShareLinkText` | TextBlock | no | |
+| `OwnerText`, `DescriptionText`, `MetaText`, `ShareLinkText` | TextBlock | no | A text post's text is `DescriptionText`, at 18 pt. |
+| `PreviewFrame` | any widget | no | The preview area; collapsed with `PrimaryButton` for text posts. |
 
 States: Thumbnail → (Confirm on mobile data) → Downloading → Preparing → Ready, or Failed with a reason
 (too big, low storage, timeout, unsupported model feature).
@@ -191,17 +194,20 @@ are reported once (see docs/roadmap.md).
 
 ## Create (`GFCCreateScreen`)
 
-Opened from **+ Post** in the bottom bar. It offers three choices, then a form with a progress bar.
+Opened from **+ Post** in the bottom bar. Top to bottom, in the order you do it: write, add something
+(optional), title, post. A post can be just text: it's uploaded as a small `.txt` seed (`<cache>/outbox/`,
+deleted after posting) with the text as its description, titled from its first line when the title is empty.
 
 | Part | Type | Required | Notes |
 |---|---|---|---|
 | `PhotoButton` | Button | yes | System camera, photo. Phone only (disabled on PC). |
 | `VideoButton` | Button | yes | System camera, video. Phone only. |
+| `BodyBox` | MultiLineEditableTextBox | no | "What's on your mind?" The whole post, or the caption. Up to 5000 characters. |
 | `GalleryButton` | Button | yes | System photo picker (photos and videos); a file dialog on PC. |
-| `TitleBox` | EditableTextBox | yes | Prefilled with the file name. |
-| `PostButton` | Button | yes | Uploads to `/seeds/upload`. |
-| `DescriptionBox` | EditableTextBox | no | |
-| `FormPanel` | any widget | no | Hidden until something is chosen. |
+| `FileButton` | Button | no | "3D model or other file": the system file browser (`ACTION_OPEN_DOCUMENT`, any type), for `.glb`/`.gltf` and audio. |
+| `TitleBox` | EditableTextBox | yes | Prefilled with the file name when there's no text. Optional for text posts. |
+| `PostButton` | Button | yes | Uploads to `/seeds/upload`. Enabled once there's text or media. |
+| `MediaPanel`, `RemoveMediaButton` | any widget, Button | no | The chosen media's preview and details; hidden when there's none. Remove drops it. |
 | `PreviewImage`, `FileText` | Image, TextBlock | no | Preview (image, or the video's first frame); name, size, "Saved to your gallery", or the 200 MB limit. |
 | `UploadProgress`, `ProgressText`, `CancelButton` | ProgressBar, TextBlock, Button | no | "Uploading 12.3 MB of 48.0 MB". Cancel stops it. |
 | `ResultText`, `ViewPostButton` | TextBlock, Button | no | "Posted!", or "This looks like a repost of @original. They'll get the credit." |
@@ -214,6 +220,22 @@ Rules:
 - Over 200 MB (the gateway's request limit) is refused before uploading. Network errors and 5xx answers are retried
   twice with backoff.
 
+## Earnings burst (`GFCRewardBurst`)
+
+When the user earns GFC: the ka-ching (`Content/GFC/Sounds/ka_ching.wav`, from the Altered Earth sound effects,
+staged as a plain file and played through a procedural sound wave) and about 20 gold coins that burst up from the
+bottom bar, flip, fade near the top and leave sparkles, under a big gold "+1,000 GFC" that pops in. Three seconds,
+above everything, never takes a tap.
+
+It plays:
+- after a post, when `/seeds/upload` answers `first_post_bonus` ("First post bonus!"). `first_post_bonus_pending`
+  instead says "Create a wallet to collect your first-post bonus."
+- at login, and on launch with a remembered session, when the user's wallets went up since they last saw them
+  ("You earned GFC while you were away!"). Each known wallet keeps `LastSeenCents` in the session save; a wallet's
+  first sighting isn't a gain, and a balance shown on the Wallet screen counts as seen.
+
+Preview it in a Development build with the console command `GFC.Celebrate [amount]`. On the phone, run
+`adb shell am broadcast -a android.intent.action.RUN -e cmd "GFC.Celebrate 1000"`.
 ## Wallet (`GFCWalletScreen`)
 
 One scrolling column: balance, backup prompt, send, wallets, history. The node has no "list my wallets" endpoint

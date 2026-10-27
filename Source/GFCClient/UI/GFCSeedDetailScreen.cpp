@@ -126,6 +126,7 @@ void UGFCSeedDetailScreen::BuildDefaultLayout()
 	PreviewBg->AddChild(Over);
 	PreviewBox->AddChild(PreviewBg);
 	AddV(Col, PreviewBox, 10.f);
+	PreviewFrame = PreviewBox;
 
 	UTextBlock* Label = nullptr;
 	PrimaryButton = MakeButton(T, LOCTEXT("View", "View"), Accent, &Label);
@@ -254,7 +255,13 @@ void UGFCSeedDetailScreen::Render()
 	if (DescriptionText)
 	{
 		DescriptionText->SetText(Seed.Description.IsEmpty() ? LOCTEXT("NoDesc", "No description.") : FText::FromString(Seed.Description));
+		FSlateFontInfo Font = DescriptionText->GetFont();
+		Font.Size = Kind == EGFCMediaKind::Text ? 18 : 15; // a text post reads bigger
+		DescriptionText->SetFont(Font);
 	}
+	const ESlateVisibility MediaVis = Kind == EGFCMediaKind::Text ? ESlateVisibility::Collapsed : ESlateVisibility::Visible;
+	if (PreviewFrame) PreviewFrame->SetVisibility(MediaVis);
+	if (PrimaryButton) PrimaryButton->SetVisibility(MediaVis);
 	if (MetaText)
 	{
 		const FString Tags = Seed.Tags.Num() ? FString::Join(Seed.Tags, TEXT(", ")) : FString(TEXT("none"));
@@ -595,7 +602,9 @@ void UGFCSeedDetailScreen::NativeTick(const FGeometry& MyGeometry, float InDelta
 	}
 
 	const bool bVisible = IsVisible() && !bAppInBackground;
-	if (Tracker.Tick(InDeltaTime, bVisible, State == EGFCDetailState::Ready))
+	// A text post is all there as soon as it's on screen; media must be loaded first.
+	const bool bLoaded = State == EGFCDetailState::Ready || Seed.GetMediaKind() == EGFCMediaKind::Text;
+	if (Tracker.Tick(InDeltaTime, bVisible, bLoaded))
 	{
 		OnQualifiedView();
 	}

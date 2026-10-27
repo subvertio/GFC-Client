@@ -115,6 +115,8 @@ enum class EGFCMediaKind : uint8
 	Video,
 	Audio,
 	Model3D,
+	/** A text post: a small .txt seed whose description holds the text. */
+	Text,
 };
 
 /** "Repost of": a seed whose content matched an earlier original. Credit and earnings go to the original. */
@@ -196,6 +198,10 @@ struct GFCAPI_API FGFCUploadResult
 	UPROPERTY(BlueprintReadOnly, Category = "GFC") bool bRewardsEnabled = false;
 	/** Set when the node matched the upload to an earlier original: the original's creator gets the credit. */
 	UPROPERTY(BlueprintReadOnly, Category = "GFC") FGFCRepostInfo RepostOf;
+	/** GFC paid for the account's first post ("first_post_bonus"), or 0. */
+	UPROPERTY(BlueprintReadOnly, Category = "GFC") double FirstPostBonus = 0.0;
+	/** The first-post bonus is waiting for the account's first wallet ("first_post_bonus_pending"). */
+	UPROPERTY(BlueprintReadOnly, Category = "GFC") bool bFirstPostBonusPending = false;
 };
 
 /** One request, for the debug overlay. Never holds the token, bodies or query strings. */

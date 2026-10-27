@@ -33,7 +33,7 @@ bool FGFCMediaCapture::IsSupported(EGFCCaptureSource Source)
 #if PLATFORM_ANDROID
 	return true;
 #elif PLATFORM_WINDOWS
-	return Source == EGFCCaptureSource::Gallery;
+	return Source == EGFCCaptureSource::Gallery || Source == EGFCCaptureSource::File;
 #else
 	return false;
 #endif
@@ -48,6 +48,7 @@ FString FGFCMediaCapture::MimeForFile(const FString& FileName)
 		{TEXT("mp4"), TEXT("video/mp4")}, {TEXT("mov"), TEXT("video/quicktime")}, {TEXT("webm"), TEXT("video/webm")},
 		{TEXT("mp3"), TEXT("audio/mpeg")}, {TEXT("wav"), TEXT("audio/wav")}, {TEXT("ogg"), TEXT("audio/ogg")}, {TEXT("m4a"), TEXT("audio/mp4")},
 		{TEXT("glb"), TEXT("model/gltf-binary")}, {TEXT("gltf"), TEXT("model/gltf+json")},
+		{TEXT("txt"), TEXT("text/plain")}, {TEXT("md"), TEXT("text/markdown")},
 	};
 	const FString* T = Types.Find(Ext);
 	return T ? *T : FString(TEXT("application/octet-stream"));
