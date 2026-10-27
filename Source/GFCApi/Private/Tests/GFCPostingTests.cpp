@@ -14,7 +14,7 @@
 
 namespace
 {
-	constexpr EAutomationTestFlags Flags = EAutomationTestFlags::EditorContext | EAutomationTestFlags::ClientContext
+	constexpr EAutomationTestFlags PostingFlags = EAutomationTestFlags::EditorContext | EAutomationTestFlags::ClientContext
 		| EAutomationTestFlags::EngineFilter;
 
 	TArray<FGFCSeed> SeedsBy(const TArray<FString>& Owners)
@@ -48,7 +48,7 @@ namespace
 	}
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGFCFeedMixerTest, "GFC.Posting.FeedMixesCreators", Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGFCFeedMixerTest, "GFC.Posting.FeedMixesCreators", PostingFlags)
 bool FGFCFeedMixerTest::RunTest(const FString&)
 {
 	TArray<FGFCSeed> A = SeedsBy({TEXT("a"), TEXT("a"), TEXT("a"), TEXT("a"), TEXT("b"), TEXT("c"), TEXT("a")});
@@ -72,7 +72,7 @@ bool FGFCFeedMixerTest::RunTest(const FString&)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGFCMultipartTest, "GFC.Posting.Multipart", Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGFCMultipartTest, "GFC.Posting.Multipart", PostingFlags)
 bool FGFCMultipartTest::RunTest(const FString&)
 {
 	const FString Dir = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Automation/GFCPostTest"));
@@ -131,7 +131,7 @@ bool FGFCMultipartTest::RunTest(const FString&)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGFCUploadJsonTest, "GFC.Posting.UploadAndRepostJson", Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGFCUploadJsonTest, "GFC.Posting.UploadAndRepostJson", PostingFlags)
 bool FGFCUploadJsonTest::RunTest(const FString&)
 {
 	FGFCUploadResult R;
@@ -160,7 +160,7 @@ bool FGFCUploadJsonTest::RunTest(const FString&)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGFCApiTraceTest, "GFC.Posting.ApiTrace", Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGFCApiTraceTest, "GFC.Posting.ApiTrace", PostingFlags)
 bool FGFCApiTraceTest::RunTest(const FString&)
 {
 	UGFCApiClient* C = NewObject<UGFCApiClient>();
