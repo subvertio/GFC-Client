@@ -13,6 +13,19 @@ void UGFCScreenBase::NativeOnInitialized()
 		BuildDefaultLayout();
 	}
 	BindEvents();
+	// Phone-style scrolling: no scroll bar taking width. Otherwise the bar appears when the keyboard
+	// shrinks the window, and the whole column reflows narrower ("fields jump when I tap a field").
+	if (WidgetTree)
+	{
+		WidgetTree->ForEachWidget([](UWidget* W)
+		{
+			if (UScrollBox* Scroll = Cast<UScrollBox>(W))
+			{
+				Scroll->SetScrollBarVisibility(ESlateVisibility::Collapsed);
+				Scroll->SetScrollWhenFocusChanges(EScrollWhenFocusChanges::NoScroll);
+			}
+		});
+	}
 }
 
 void UGFCScreenBase::OnScreenShown()

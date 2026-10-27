@@ -46,33 +46,29 @@ namespace
 void UGFCWalletScreen::BuildDefaultLayout()
 {
 	UWidgetTree* T = WidgetTree;
-	// Portrait: one scrolling column, most-used things first.
+	// Portrait: one scrolling column in the order things are done (create, back up, receive, send, history).
 	UScrollBox* Scroll = T->ConstructWidget<UScrollBox>();
 	T->RootWidget = Scroll;
 	UVerticalBox* Left = MakeColumn(T);
 	Scroll->AddChild(Left);
 
-	// Balance
+	// 1. Create a wallet (or add one you own): the first thing a new user does
 	{
-		UVerticalBox* Col = Section(T, Left, LOCTEXT("YourWallet", "Your wallet"));
-		WalletPicker = T->ConstructWidget<UComboBoxString>();
-		StyleComboBox(WalletPicker);
-		NoWalletText = MakeText(T, LOCTEXT("NoWallet", "You don't have a wallet on this device yet. Create one below."), 12, TextDim);
-		AddV(Col, NoWalletText, 6.f);
-		AddV(Col, WalletPicker, 12.f);
-		BalanceText = MakeText(T, FText::GetEmpty(), 36, AccentText, true);
-		AddV(Col, BalanceText, 4.f);
-		WalletIdText = MakeText(T, FText::GetEmpty(), 12, TextDim);
-		AddV(Col, WalletIdText, 8.f);
-		UHorizontalBox* IdRow = MakeRow(T);
-		CopyIdButton = MakeButton(T, LOCTEXT("CopyId", "Copy ID"), PanelRaised);
-		RefreshButton = MakeButton(T, LOCTEXT("Refresh", "Refresh"), PanelRaised);
-		AddH(IdRow, CopyIdButton, 8.f, true);
-		AddH(IdRow, RefreshButton, 0.f, true);
-		AddV(Col, IdRow, 0.f);
+		UVerticalBox* Col = Section(T, Left, LOCTEXT("More", "1. Your wallets"));
+		NewWalletNameBox = MakeInput(T, LOCTEXT("NameHint", "new wallet name (optional)"));
+		CreateWalletButton = MakeButton(T, LOCTEXT("Create", "Create wallet"));
+		AddV(Col, NewWalletNameBox, 8.f);
+		AddV(Col, CreateWalletButton, 16.f);
+		AddWalletIdBox = MakeInput(T, LOCTEXT("AddHint", "wallet ID you already own on this node"));
+		AddWalletButton = MakeButton(T, LOCTEXT("Add", "Add by ID"), PanelRaised);
+		AddV(Col, AddWalletIdBox, 8.f);
+		AddV(Col, AddWalletButton, 10.f);
+		AddV(Col, MakeText(T, LOCTEXT("PhoneNote",
+			"Your first wallet receives the 100 GFC welcome grant once your phone number is verified (coming to this app in milestone 3)."),
+			11, TextDim), 0.f);
 	}
 
-	// Backup prompt: deliberately loud.
+	// 2. Back it up: deliberately loud, right after creating.
 	{
 		UBorder* Card = MakeCard(T, FMargin(18.f), &Warning); // the one card outlined in colour: hard to miss
 		UVerticalBox* Col = MakeColumn(T);
@@ -97,7 +93,27 @@ void UGFCWalletScreen::BuildDefaultLayout()
 		AddV(Left, Card, 14.f);
 	}
 
-	// Send
+	// 3. Balance, and the ID to receive GFC
+	{
+		UVerticalBox* Col = Section(T, Left, LOCTEXT("YourWallet", "Balance"));
+		WalletPicker = T->ConstructWidget<UComboBoxString>();
+		StyleComboBox(WalletPicker);
+		NoWalletText = MakeText(T, LOCTEXT("NoWallet", "You don't have a wallet on this device yet. Create one below."), 12, TextDim);
+		AddV(Col, NoWalletText, 6.f);
+		AddV(Col, WalletPicker, 12.f);
+		BalanceText = MakeText(T, FText::GetEmpty(), 36, AccentText, true);
+		AddV(Col, BalanceText, 4.f);
+		WalletIdText = MakeText(T, FText::GetEmpty(), 12, TextDim);
+		AddV(Col, WalletIdText, 8.f);
+		UHorizontalBox* IdRow = MakeRow(T);
+		CopyIdButton = MakeButton(T, LOCTEXT("CopyId", "Copy ID"), PanelRaised);
+		RefreshButton = MakeButton(T, LOCTEXT("Refresh", "Refresh"), PanelRaised);
+		AddH(IdRow, CopyIdButton, 8.f, true);
+		AddH(IdRow, RefreshButton, 0.f, true);
+		AddV(Col, IdRow, 0.f);
+	}
+
+	// 4. Send
 	{
 		UVerticalBox* Col = Section(T, Left, LOCTEXT("Send", "Send GFC"));
 		RecipientBox = MakeInput(T, LOCTEXT("ToHint", "recipient wallet ID"));
@@ -112,23 +128,7 @@ void UGFCWalletScreen::BuildDefaultLayout()
 		AddV(Col, SendButton, 0.f);
 	}
 
-	// Create / add
-	{
-		UVerticalBox* Col = Section(T, Left, LOCTEXT("More", "Wallets"));
-		NewWalletNameBox = MakeInput(T, LOCTEXT("NameHint", "new wallet name (optional)"));
-		CreateWalletButton = MakeButton(T, LOCTEXT("Create", "Create wallet"));
-		AddV(Col, NewWalletNameBox, 8.f);
-		AddV(Col, CreateWalletButton, 16.f);
-		AddWalletIdBox = MakeInput(T, LOCTEXT("AddHint", "wallet ID you already own on this node"));
-		AddWalletButton = MakeButton(T, LOCTEXT("Add", "Add by ID"), PanelRaised);
-		AddV(Col, AddWalletIdBox, 8.f);
-		AddV(Col, AddWalletButton, 10.f);
-		AddV(Col, MakeText(T, LOCTEXT("PhoneNote",
-			"Your first wallet receives the 100 GFC welcome grant once your phone number is verified (coming to this app in milestone 3)."),
-			11, TextDim), 0.f);
-	}
-
-	// History, last: rows are added to a plain box inside the page's scroll.
+	// 5. History, last: rows are added to a plain box inside the page's scroll.
 	{
 		UVerticalBox* Col = Section(T, Left, LOCTEXT("History", "History"));
 		HistoryList = MakeColumn(T);

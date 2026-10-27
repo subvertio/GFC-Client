@@ -1,14 +1,15 @@
 # Installs the newest packaged APK on the USB-connected phone, launches it, and saves logcat to D:.
 # Usage:  .\Scripts\PhoneRun.ps1                         (install, launch, capture logs until Ctrl+C)
 #         .\Scripts\PhoneRun.ps1 -NoInstall -Seconds 60  (just launch and capture 60 s)
-#         .\Scripts\PhoneRun.ps1 -Node http://127.0.0.1:8100     (local test node on this PC, tunnelled over USB)
+#         .\Scripts\PhoneRun.ps1 -Node http://127.0.0.1:8100     (tunnel the PC's local test node over USB; pick it in the app)
 param(
     [switch]$NoInstall,
     [int]$Seconds = 0,
     [string]$Node = '',
     [string]$LogDir = 'D:\GFCLogs'
 )
-$ErrorActionPreference = 'Stop'
+# adb writes progress to stderr; with 'Stop', Windows PowerShell 5.1 would treat that as a failure.
+$ErrorActionPreference = 'Continue'
 $root = Split-Path $PSScriptRoot -Parent
 $sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { [Environment]::GetEnvironmentVariable('ANDROID_HOME', 'User') }
 $adb = Join-Path $sdk 'platform-tools\adb.exe'
@@ -25,17 +26,13 @@ if (-not $NoInstall) {
     if ($LASTEXITCODE -ne 0) { throw 'adb install failed.' }
 }
 
-# Optional: a command line for this launch (UE reads UECommandLine.txt from the app's files folder).
-if ($Node) {
-    # A local test node (127.0.0.1 on this PC) is reached from the phone through the USB cable, so the node
-    # never has to listen on the network.
-    if ($Node -match '^http://(127\.0\.0\.1|localhost):(\d+)') {
-        & $adb reverse "tcp:$($Matches[2])" "tcp:$($Matches[2])" | Out-Null
-    }
-    $cmd = "../../../GFCClient/GFCClient.uproject -GFCNode=$Node -GFCDebug"
-    $tmp = Join-Path $env:TEMP 'UECommandLine.txt'
-    Set-Content -Path $tmp -Value $cmd -NoNewline -Encoding ascii
-    & $adb push $tmp "/sdcard/Android/data/$package/files/UnrealGame/GFCClient/UECommandLine.txt" | Out-Null
+# A local test node (127.0.0.1 on this PC) is reached from the phone through the USB cable, so the node
+# never has to listen on the network. In the app, tap "Test node (USB)" on the login screen to use it.
+# (Don't push files into the app's folder with adb: they're owned by the shell user, and the app then
+# can't create its Saved folder next to them.)
+if ($Node -match '^http://(127\.0\.0\.1|localhost):(\d+)') {
+    & $adb reverse "tcp:$($Matches[2])" "tcp:$($Matches[2])" | Out-Null
+    Write-Host "Tunnelled phone 127.0.0.1:$($Matches[2]) to this PC over USB"
 }
 
 New-Item -ItemType Directory -Force $LogDir | Out-Null

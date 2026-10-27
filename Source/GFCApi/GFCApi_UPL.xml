@@ -23,29 +23,30 @@
 
 	<androidManifestUpdates>
 		<addPermission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>
-		<addElements tag="activity" name="com.epicgames.unreal.GameActivity">
-			<intent-filter android:autoVerify="true">
-				<action android:name="android.intent.action.VIEW"/>
-				<category android:name="android.intent.category.DEFAULT"/>
-				<category android:name="android.intent.category.BROWSABLE"/>
-				<data android:scheme="https"/>
-				<data android:host="node.galacticfederation.tech"/>
-				<data android:pathPrefix="/p/"/>
-			</intent-filter>
-			<intent-filter>
-				<action android:name="android.intent.action.VIEW"/>
-				<category android:name="android.intent.category.DEFAULT"/>
-				<category android:name="android.intent.category.BROWSABLE"/>
-				<data android:scheme="gfc" android:host="seed"/>
-			</intent-filter>
-		</addElements>
-		<!-- A link tapped while the app runs must reach onNewIntent, not start a second copy. -->
+		<!-- GameActivity: App Link + gfc:// filters, and singleTask so a link tapped while the app runs reaches onNewIntent. -->
 		<loopElements tag="activity">
 			<setStringFromAttribute result="activityName" tag="$" name="android:name"/>
 			<setBoolIsEqual result="bGameActivity" arg1="$S(activityName)" arg2="com.epicgames.unreal.GameActivity"/>
 			<if condition="bGameActivity">
 				<true>
 					<addAttribute tag="$" name="android:launchMode" value="singleTask"/>
+					<!-- Only GameActivity gets the link filters: tag="activity" alone would add them to every activity. -->
+					<addElements tag="$">
+					<intent-filter android:autoVerify="true">
+						<action android:name="android.intent.action.VIEW"/>
+						<category android:name="android.intent.category.DEFAULT"/>
+						<category android:name="android.intent.category.BROWSABLE"/>
+						<data android:scheme="https"/>
+						<data android:host="node.galacticfederation.tech"/>
+						<data android:pathPrefix="/p/"/>
+					</intent-filter>
+					<intent-filter>
+						<action android:name="android.intent.action.VIEW"/>
+						<category android:name="android.intent.category.DEFAULT"/>
+						<category android:name="android.intent.category.BROWSABLE"/>
+						<data android:scheme="gfc" android:host="seed"/>
+					</intent-filter>
+					</addElements>
 				</true>
 			</if>
 		</loopElements>
@@ -234,6 +235,42 @@
 		catch (Exception e)
 		{
 			gfcFail("The media couldn't be read.");
+		}
+	}
+
+	/**
+	 * Saves a wallet backup where the user can find it: Downloads/GFC (MediaStore, no permission on
+	 * Android 10+). Returns a human-readable location, or "" on failure. It survives uninstalling the app.
+	 */
+	public String AndroidThunkJava_GFCSaveToDownloads(String name, String text)
+	{
+		try
+		{
+			byte[] bytes = text.getBytes("UTF-8");
+			if (android.os.Build.VERSION.SDK_INT >= 29)
+			{
+				android.content.ContentValues values = new android.content.ContentValues();
+				values.put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, name);
+				values.put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "application/json");
+				values.put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, "Download/GFC");
+				android.net.Uri uri = getContentResolver().insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+				if (uri == null) return "";
+				java.io.OutputStream os = getContentResolver().openOutputStream(uri);
+				os.write(bytes);
+				os.close();
+				return "Downloads/GFC/" + name;
+			}
+			java.io.File dir = new java.io.File(getExternalFilesDir(null), "Backups");
+			dir.mkdirs();
+			java.io.File f = new java.io.File(dir, name);
+			java.io.FileOutputStream fos = new java.io.FileOutputStream(f);
+			fos.write(bytes);
+			fos.close();
+			return f.getAbsolutePath();
+		}
+		catch (Exception e)
+		{
+			return "";
 		}
 	}
 

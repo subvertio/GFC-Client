@@ -38,34 +38,36 @@ void UGFCLoginScreen::BuildDefaultLayout()
 	AddV(Col, MakeText(T, LOCTEXT("Title", "Galactic Federation Coin"), 24, Text, true), 4.f);
 	AddV(Col, MakeText(T, LOCTEXT("Subtitle", "Log in or create an account to see the feed and your wallet."), 13, TextDim), 18.f);
 
-	UsernameBox = MakeInput(T, LOCTEXT("UserHint", "username"));
-	PasswordBox = MakeInput(T, LOCTEXT("PassHint", "password"), true);
-	EmailBox = MakeInput(T, LOCTEXT("EmailHint", "e-mail (optional)"));
-	AddV(Col, MakeField(T, LOCTEXT("User", "Username"), UsernameBox), 12.f);
-	AddV(Col, MakeField(T, LOCTEXT("Pass", "Password"), PasswordBox), 12.f);
-	AddV(Col, MakeField(T, LOCTEXT("Email", "E-mail, for new accounts"), EmailBox), 18.f);
-
-	LoginButton = MakeButton(T, LOCTEXT("Login", "Log in"));
-	RegisterButton = MakeButton(T, LOCTEXT("Register", "Create account"), PanelRaised);
-	AddV(Col, LoginButton, 10.f);
-	AddV(Col, RegisterButton, 18.f);
-
-	AddV(Col, MakeText(T, LOCTEXT("PasswordWarning",
-		"Your password also unlocks your wallet keys on the node. There is no reset: back up your wallet after you create it."),
-		12, Warning), 22.f);
-
-	NodeText = MakeText(T, FText::GetEmpty(), 11, TextDim);
+	// In the order it's done: where (node), who (username, password), then go (log in / create).
+	NodeText = MakeText(T, FText::GetEmpty(), 12, TextDim);
 	AddV(Col, NodeText, 6.f);
 	UHorizontalBox* Presets = MakeRow(T);
 	LiveNodeButton = MakeButton(T, LOCTEXT("Live", "Live node"), PanelRaised);
 	LocalNodeButton = MakeButton(T, LOCTEXT("Local", "Test node (USB)"), PanelRaised);
 	AddH(Presets, LiveNodeButton, 8.f, true);
 	AddH(Presets, LocalNodeButton, 0.f, true);
-	AddV(Col, Presets, 10.f);
-	NodeUrlBox = MakeInput(T, LOCTEXT("NodeHint", "https://node.galacticfederation.tech"));
-	UseNodeButton = MakeButton(T, LOCTEXT("UseNode", "Use this node"), PanelRaised);
-	AddV(Col, NodeUrlBox, 8.f);
-	AddV(Col, UseNodeButton, 0.f);
+	AddV(Col, Presets, 8.f);
+	UHorizontalBox* Custom = MakeRow(T);
+	NodeUrlBox = MakeInput(T, LOCTEXT("NodeHint", "or another node's address"));
+	UseNodeButton = MakeButton(T, LOCTEXT("UseNode", "Use"), PanelRaised);
+	AddH(Custom, NodeUrlBox, 8.f, true);
+	AddH(Custom, UseNodeButton, 0.f);
+	AddV(Col, Custom, 20.f);
+
+	UsernameBox = MakeInput(T, LOCTEXT("UserHint", "username"));
+	PasswordBox = MakeInput(T, LOCTEXT("PassHint", "password"), true);
+	EmailBox = MakeInput(T, LOCTEXT("EmailHint", "e-mail (optional)"));
+	AddV(Col, MakeField(T, LOCTEXT("User", "Username"), UsernameBox), 12.f);
+	AddV(Col, MakeField(T, LOCTEXT("Pass", "Password"), PasswordBox), 6.f);
+	AddV(Col, MakeText(T, LOCTEXT("PasswordWarning",
+		"Your password also unlocks your wallet keys on the node. There is no reset: back up your wallet after you create it."),
+		12, Warning), 12.f);
+	AddV(Col, MakeField(T, LOCTEXT("Email", "E-mail, for new accounts"), EmailBox), 20.f);
+
+	LoginButton = MakeButton(T, LOCTEXT("Login", "Log in"));
+	RegisterButton = MakeButton(T, LOCTEXT("Register", "Create account"), PanelRaised);
+	AddV(Col, LoginButton, 10.f);
+	AddV(Col, RegisterButton, 0.f);
 }
 
 void UGFCLoginScreen::BindEvents()

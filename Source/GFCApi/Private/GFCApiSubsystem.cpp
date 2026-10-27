@@ -6,6 +6,10 @@
 #include "GFCUrl.h"
 
 #include "HAL/PlatformFileManager.h"
+#if PLATFORM_ANDROID
+#include "Android/AndroidApplication.h"
+#include "Android/AndroidJNI.h"
+#endif
 #include "Kismet/GameplayStatics.h"
 #include "Misc/CommandLine.h"
 #include "Misc/DateTime.h"
@@ -170,13 +174,33 @@ bool UGFCApiSubsystem::NeedsBackup() const
 
 FString UGFCApiSubsystem::SaveBackupFile(const FString& BackupJson) const
 {
+	const FString Safe = FPaths::MakeValidFileName(Client->GetUsername(), TEXT('_'));
+	const FString Name = FString::Printf(TEXT("%s-wallet-backup-%s.json"), *Safe, *FDateTime::UtcNow().ToString(TEXT("%Y%m%d-%H%M%S")));
+#if PLATFORM_ANDROID
+	// Downloads/GFC, where the user can see it and copy it off the phone (and it outlives the app).
+	if (JNIEnv* Env = FAndroidApplication::GetJavaEnv())
+	{
+		static jmethodID Method = FJavaWrapper::FindMethod(Env, FJavaWrapper::GameActivityClassID,
+			"AndroidThunkJava_GFCSaveToDownloads", "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;", false);
+		if (Method)
+		{
+			auto JName = FJavaHelper::ToJavaString(Env, Name);
+			auto JText = FJavaHelper::ToJavaString(Env, BackupJson);
+			jstring JResult = (jstring)FJavaWrapper::CallObjectMethod(Env, FJavaWrapper::GameActivityThis, Method, *JName, *JText);
+			const FString Where = FJavaHelper::FStringFromLocalRef(Env, JResult);
+			if (!Where.IsEmpty())
+			{
+				return Where;
+			}
+		}
+	}
+#endif
 	const FString Dir = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Backups"));
 	IPlatformFile& PF = FPlatformFileManager::Get().GetPlatformFile();
 	if (!PF.CreateDirectoryTree(*Dir))
 	{
 		return FString();
 	}
-	const FString Safe = FPaths::MakeValidFileName(Client->GetUsername(), TEXT('_'));
-	const FString Path = Dir / FString::Printf(TEXT("%s-wallet-backup-%s.json"), *Safe, *FDateTime::UtcNow().ToString(TEXT("%Y%m%d-%H%M%S")));
+	const FString Path = Dir / Name;
 	return FFileHelper::SaveStringToFile(BackupJson, *Path, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM) ? Path : FString();
 }
