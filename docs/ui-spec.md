@@ -5,6 +5,19 @@ is built in C++ (`Source/GFCClient/UI`), so the project runs without
 hand-authored assets, and each screen is designed to be replaced by a **Widget
 Blueprint** later without C++ changes.
 
+## Target device (milestone 1)
+
+**Single target device: moto g power (2025), 1080×2388 px portrait at 390 dpi** (2.4375× scale, about
+443 × 979 dp), Android 16, 60 Hz. Milestone 1 is laid out and checked for that one screen only. Tablets,
+landscape, odd aspect ratios and other densities come later (see the roadmap).
+
+- The UI scale curve maps 1080 px wide to 2.4375, so layouts are designed at **443 dp** wide.
+- PC checks use the same layout: `Scripts\Run.ps1` opens 486×1075 (45% size, so it fits the dev monitor; same aspect and dp layout), and
+  `-Full` opens 1080×2388. The editor's new-window play size is 1080×2388
+  (`Config/DefaultEditorPerProjectUserSettings.ini`).
+- Basic safe areas are kept (status bar and gesture bar), so nothing is clipped on this phone.
+- Frame targets: 60 fps UI, 30 fps or better in the 3D viewer.
+
 ## Mobile rules (apply to Blueprint screens too)
 
 - **Portrait**, one column. Android is locked to portrait (`Orientation=Portrait`).
@@ -12,10 +25,10 @@ Blueprint** later without C++ changes.
 - **Tap targets at least 48 dp** tall; primary actions span the full width.
 - **One-handed:** navigation sits in a bottom bar (Feed, Wallet). Primary actions sit under the content they act on.
 - **No hover-dependent UI.** Buttons use `Touch Method: Precise Tap` so a drag that starts on a button scrolls its list.
-- **Sizes are in dp.** The DPI curve (`DefaultEngine.ini`, `UIScaleCurve`) maps a 412 dp-wide phone to scale 1.0.
+- **Sizes are in dp.** The DPI curve (`DefaultEngine.ini`, `UIScaleCurve`) maps the target phone's 1080 px to 2.4375 (443 dp).
   Text: titles 22 to 26, body 13 to 16, captions 11 to 12. Inputs use 16 so phones don't zoom.
 - **Bandwidth:** thumbnails first; full media only on tap (and after asking, on mobile data above 10 MB).
-- **Preview while designing:** `.\Scripts\Run.ps1` (432x900, mobile renderer), with `-Screen wallet|feed|seed:<id>`.
+- **Preview while designing:** `.\Scripts\Run.ps1` (486x1075, the target phone at 45% size, mobile renderer), with `-Screen wallet|feed|seed:<id>|create`.
 
 ## Feed principles: the user is in control
 

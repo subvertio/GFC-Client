@@ -124,6 +124,16 @@ Still to verify or build on a real phone:
 - Uploads in the background (a foreground service) so posting survives the screen turning off.
 - Icons: add an open-licensed set (Material Symbols, Apache 2.0, or Lucide, ISC); text labels for now.
 
+## Later: more screens and Google Play
+
+- **Broader screen support.** Milestone 1 targets one phone (moto g power 2025, 1080×2388 at 390 dpi). Later:
+  other densities and aspect ratios, small phones (360 dp), tablets, landscape, and foldables. The dp layout and
+  SafeZone make this mostly a matter of testing and a DPI curve with more points.
+- **Google Play target SDK.** UE's setup installed `platforms;android-34`, and the project targets 34. That's
+  fine for sideloaded development builds, but Play requires a recent target SDK for new apps and updates (35 or
+  36 when we publish). Install that platform, set `TargetSDKVersion`, and retest permissions and the photo
+  picker before the Play listing.
+
 ## Android build (next)
 
 - Install Android support in the Epic launcher (UE 5.7 > Options > Android) and the SDK/NDK (README).
