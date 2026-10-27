@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "UI/GFCScreenBase.h"
@@ -6,7 +6,11 @@
 #include "GFCMediaCapture.h"
 #include "GFCCreateScreen.generated.h"
 
+class AGFCModelViewer;
 class FGFCUploadJob;
+class UGFCModelView;
+class USizeBox;
+struct FGFCModelData;
 class UButton;
 class UEditableTextBox;
 class UMultiLineEditableTextBox;
@@ -30,6 +34,7 @@ class GFCCLIENT_API UGFCCreateScreen : public UGFCScreenBase
 
 public:
 	virtual void OnScreenShown() override;
+	virtual void OnScreenHidden() override;
 
 	/** Picks or captures media (what the source buttons do). */
 	void Choose(EGFCCaptureSource Source);
@@ -47,6 +52,8 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidget)) TObjectPtr<UButton> GalleryButton;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidget)) TObjectPtr<UEditableTextBox> TitleBox;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidget)) TObjectPtr<UButton> PostButton;
+	/** The same action in the screen's header, always in reach. */
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> HeaderPostButton;
 	/** What the post says: the whole post for a text post, the caption otherwise. */
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UMultiLineEditableTextBox> BodyBox;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> FileButton;
@@ -76,6 +83,9 @@ private:
 	void SetUploading(bool bUploading);
 	void DiscardMedia();
 	void UpdatePostEnabled();
+	void StartModelPreview(const FString& Path);
+	void OnModelParsed(TSharedPtr<FGFCModelData> Model, bool bOk, const FString& Error);
+	void ReleaseModelPreview();
 	void ShowMediaPanel();
 
 public:
@@ -92,4 +102,10 @@ private:
 	FGFCSeed Posted;
 	TSharedPtr<FGFCUploadJob> Job;
 	UPROPERTY(Transient) TObjectPtr<UTexture2D> PreviewTexture;
+	/** A 3D model's live preview (turntable, animation, drag to turn); its view becomes the thumbnail. */
+	UPROPERTY(Transient) TObjectPtr<AGFCModelViewer> PreviewViewer;
+	UPROPERTY(Transient) TObjectPtr<UGFCModelView> PreviewModelView;
+	UPROPERTY(Transient) TObjectPtr<USizeBox> PreviewSize;
+	uint32 PreviewSerial = 0;
+	UPROPERTY(Transient) TObjectPtr<class UScrollBox> FormScroll;
 };

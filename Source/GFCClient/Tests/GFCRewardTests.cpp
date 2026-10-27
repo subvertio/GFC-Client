@@ -13,7 +13,7 @@
 
 namespace
 {
-	constexpr EAutomationTestFlags Flags = EAutomationTestFlags::EditorContext | EAutomationTestFlags::ClientContext
+	constexpr EAutomationTestFlags RewardFlags = EAutomationTestFlags::EditorContext | EAutomationTestFlags::ClientContext
 		| EAutomationTestFlags::EngineFilter;
 
 	void Put32(TArray<uint8>& B, uint32 V) { for (int32 i = 0; i < 4; ++i) B.Add(uint8(V >> (8 * i))); }
@@ -33,7 +33,7 @@ namespace
 	}
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGFCWavTest, "GFC.Reward.WavLoader", Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGFCWavTest, "GFC.Reward.WavLoader", RewardFlags)
 bool FGFCWavTest::RunTest(const FString&)
 {
 	TArray<uint8> Pcm;
@@ -58,7 +58,7 @@ bool FGFCWavTest::RunTest(const FString&)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGFCEarnedTest, "GFC.Reward.EarnedSinceLastSeen", Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGFCEarnedTest, "GFC.Reward.EarnedSinceLastSeen", RewardFlags)
 bool FGFCEarnedTest::RunTest(const FString&)
 {
 	TestEqual(TEXT("first sighting is not a gain"), UGFCApiSubsystem::EarnedSince(-1, 100000), int64(0));
@@ -68,7 +68,7 @@ bool FGFCEarnedTest::RunTest(const FString&)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGFCBonusJsonTest, "GFC.Reward.FirstPostBonusJson", Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGFCBonusJsonTest, "GFC.Reward.FirstPostBonusJson", RewardFlags)
 bool FGFCBonusJsonTest::RunTest(const FString&)
 {
 	FGFCUploadResult R;

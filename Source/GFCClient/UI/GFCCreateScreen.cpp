@@ -1,4 +1,4 @@
-﻿#include "UI/GFCCreateScreen.h"
+#include "UI/GFCCreateScreen.h"
 
 #include "Blueprint/WidgetTree.h"
 #include "Containers/Ticker.h"
@@ -12,7 +12,17 @@
 #include "Components/ScrollBox.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
+#include "Components/HorizontalBox.h"
+#include "Components/HorizontalBoxSlot.h"
+#include "Components/Overlay.h"
+#include "Components/OverlaySlot.h"
 #include "Components/VerticalBox.h"
+#include "Async/Async.h"
+#include "Engine/World.h"
+#include "GFCApiSettings.h"
+#include "GFCModelParser.h"
+#include "Viewer/GFCModelView.h"
+#include "Viewer/GFCModelViewer.h"
 #include "Engine/Texture2D.h"
 #include "GFCApiClient.h"
 #include "GFCCacheSubsystem.h"
@@ -46,11 +56,18 @@ void UGFCCreateScreen::BuildDefaultLayout()
 	UWidgetTree* T = WidgetTree;
 	UScrollBox* Scroll = T->ConstructWidget<UScrollBox>();
 	T->RootWidget = Scroll;
+	FormScroll = Scroll;
 	UVerticalBox* Col = MakeColumn(T);
 	Scroll->AddChild(Col);
 
 	// Top to bottom, in the order you do it: write, add media (optional), title, post.
-	AddV(Col, MakeText(T, LOCTEXT("Title", "Post"), 22, Text, true), 12.f);
+	// Header: the screen's name and a Post button that's always in reach, however long the form gets.
+	UHorizontalBox* Header = MakeRow(T);
+	AddH(Header, MakeText(T, LOCTEXT("Title", "New post"), 22, Text, true), 0.f, true);
+	HeaderPostButton = MakeButton(T, LOCTEXT("PostTop", "Post"));
+	AddH(Header, HeaderPostButton, 0.f);
+	if (UHorizontalBoxSlot* S = Cast<UHorizontalBoxSlot>(HeaderPostButton->Slot)) S->SetVerticalAlignment(VAlign_Center);
+	AddV(Col, Header, 12.f);
 
 	BodyBox = MakeMultiLineInput(T, LOCTEXT("BodyHint", "What's on your mind?"));
 	USizeBox* BodySize = T->ConstructWidget<USizeBox>();
@@ -75,15 +92,28 @@ void UGFCCreateScreen::BuildDefaultLayout()
 
 	UVerticalBox* M = MakeColumn(T);
 
-	USizeBox* PreviewBox = T->ConstructWidget<USizeBox>();
-	PreviewBox->SetHeightOverride(200.f);
-	PreviewBox->SetClipping(EWidgetClipping::ClipToBounds);
+	// Preview: the image or video frame, or for a 3D model the live model on its turntable.
+	PreviewSize = T->ConstructWidget<USizeBox>();
+	PreviewSize->SetHeightOverride(200.f);
+	PreviewSize->SetClipping(EWidgetClipping::ClipToBounds);
+	USizeBox* PreviewBox = PreviewSize;
 	UBorder* PreviewBg = MakePanel(T, Background, FMargin(0.f));
+	UOverlay* PreviewOver = T->ConstructWidget<UOverlay>();
 	UScaleBox* Fit = T->ConstructWidget<UScaleBox>();
 	Fit->SetStretch(EStretch::ScaleToFit);
 	PreviewImage = T->ConstructWidget<UImage>();
 	Fit->AddChild(PreviewImage);
-	PreviewBg->AddChild(Fit);
+	PreviewModelView = CreateWidget<UGFCModelView>(this, UGFCModelView::StaticClass());
+	PreviewModelView->SetVisibility(ESlateVisibility::Collapsed);
+	for (UWidget* W : TArray<UWidget*>{Fit, PreviewModelView})
+	{
+		if (UOverlaySlot* S = PreviewOver->AddChildToOverlay(W))
+		{
+			S->SetHorizontalAlignment(HAlign_Fill);
+			S->SetVerticalAlignment(VAlign_Fill);
+		}
+	}
+	PreviewBg->AddChild(PreviewOver);
 	PreviewBox->AddChild(PreviewBg);
 	AddV(M, PreviewBox, 8.f);
 	FileText = MakeText(T, FText::GetEmpty(), 12, TextDim);
@@ -123,6 +153,7 @@ void UGFCCreateScreen::BindEvents()
 	if (RemoveMediaButton) RemoveMediaButton->OnClicked.AddDynamic(this, &ThisClass::HandleRemoveMedia);
 	if (BodyBox) BodyBox->OnTextChanged.AddDynamic(this, &ThisClass::HandleBodyChanged);
 	if (PostButton) PostButton->OnClicked.AddDynamic(this, &ThisClass::HandlePost);
+	if (HeaderPostButton) HeaderPostButton->OnClicked.AddDynamic(this, &ThisClass::HandlePost);
 	if (CancelButton) CancelButton->OnClicked.AddDynamic(this, &ThisClass::HandleCancel);
 	if (ViewPostButton) ViewPostButton->OnClicked.AddDynamic(this, &ThisClass::HandleViewPost);
 }
@@ -133,12 +164,20 @@ void UGFCCreateScreen::OnScreenShown()
 	if (PhotoButton) PhotoButton->SetIsEnabled(FGFCMediaCapture::IsSupported(EGFCCaptureSource::Photo));
 	if (VideoButton) VideoButton->SetIsEnabled(FGFCMediaCapture::IsSupported(EGFCCaptureSource::Video));
 	if (FileButton) FileButton->SetIsEnabled(FGFCMediaCapture::IsSupported(EGFCCaptureSource::File));
+	if (PreviewViewer) PreviewViewer->SetActorTickEnabled(true);
 	if (!Job.IsValid())
 	{
 		ShowMediaPanel();
 		SetUploading(false);
 	}
 	Super::OnScreenShown();
+}
+
+void UGFCCreateScreen::OnScreenHidden()
+{
+	// Off screen, the preview stops turning and rendering; it carries on when the screen comes back.
+	if (PreviewViewer) PreviewViewer->SetActorTickEnabled(false);
+	Super::OnScreenHidden();
 }
 
 void UGFCCreateScreen::NativeDestruct()
@@ -180,7 +219,9 @@ void UGFCCreateScreen::UpdatePostEnabled()
 {
 	const bool bHasText = BodyBox && !BodyBox->GetText().ToString().TrimStartAndEnd().IsEmpty();
 	const bool bTooBig = !Chosen.Path.IsEmpty() && Chosen.Size + 64 * 1024 > UGFCApiClient::MaxUploadBytes;
-	if (PostButton) PostButton->SetIsEnabled(!bTooBig && (bHasText || !Chosen.Path.IsEmpty()));
+	const bool bCanPost = !bTooBig && (bHasText || !Chosen.Path.IsEmpty());
+	if (PostButton) PostButton->SetIsEnabled(bCanPost);
+	if (HeaderPostButton) HeaderPostButton->SetIsEnabled(bCanPost && !Job.IsValid());
 }
 
 FString UGFCCreateScreen::TitleFromBody(const FString& Body)
@@ -256,7 +297,7 @@ void UGFCCreateScreen::OnChosen(const FGFCCapturedMedia& Media)
 	const bool bTooBig = Media.Size + 64 * 1024 > UGFCApiClient::MaxUploadBytes;
 	if (FileText)
 	{
-		FText Info = FText::Format(LOCTEXT("FileInfo", "{0} Â· {1}"), FText::FromString(Media.FileName), Size(Media.Size));
+		FText Info = FText::Format(LOCTEXT("FileInfo", "{0} · {1}"), FText::FromString(Media.FileName), Size(Media.Size));
 		if (Media.bSavedToGallery)
 		{
 			Info = FText::Format(LOCTEXT("Saved", "{0}\nSaved to your gallery."), Info);
@@ -294,7 +335,95 @@ void UGFCCreateScreen::OnChosen(const FGFCCapturedMedia& Media)
 			PreviewImage->SetColorAndOpacity(FLinearColor::Transparent);
 		}
 	}
+	if (Media.MimeType.StartsWith(TEXT("model/")))
+	{
+		StartModelPreview(Media.Path);
+	}
 	SetUploading(false);
+	// Next step is the title and Post: bring them into view under the preview.
+	if (FormScroll && PostButton) FormScroll->ScrollWidgetIntoView(PostButton, true, EDescendantScrollDestination::BottomOrRight);
+}
+
+void UGFCCreateScreen::StartModelPreview(const FString& Path)
+{
+	// The same parse and budgets as the seed screen, off the game thread: what you see here is what phones will show.
+	if (PreviewSize) PreviewSize->SetHeightOverride(280.f);
+	if (FileText) FileText->SetText(FText::Format(LOCTEXT("Building", "{0}\nBuilding the 3D preview…"), FileText->GetText()));
+	const uint32 Serial = ++PreviewSerial;
+	const FGFCModelBudget Budget = FGFCModelBudget::FromSettings();
+	TWeakObjectPtr<UGFCCreateScreen> WeakThis(this);
+	Async(EAsyncExecution::ThreadPool, [WeakThis, Serial, Path, Budget]()
+	{
+		TArray<uint8> Bytes;
+		TSharedPtr<FGFCModelData> Model = MakeShared<FGFCModelData>();
+		FString Error;
+		const bool bOk = FFileHelper::LoadFileToArray(Bytes, *Path) && FGFCModelParser::Parse(Bytes, Budget, *Model, Error);
+		AsyncTask(ENamedThreads::GameThread, [WeakThis, Serial, Model, bOk, Error]()
+		{
+			if (WeakThis.IsValid() && WeakThis->PreviewSerial == Serial)
+			{
+				WeakThis->OnModelParsed(Model, bOk, Error);
+			}
+		});
+	});
+}
+
+void UGFCCreateScreen::OnModelParsed(TSharedPtr<FGFCModelData> Model, bool bOk, const FString& Error)
+{
+	const FText Base = FText::Format(LOCTEXT("FileInfo", "{0} · {1}"), FText::FromString(Chosen.FileName), Size(Chosen.Size));
+	UWorld* World = GetWorld();
+	if (!bOk || !World)
+	{
+		// Still postable (the original is kept), but phones won't be able to show it.
+		if (FileText)
+		{
+			FileText->SetText(FText::Format(LOCTEXT("ModelBad", "{0}\nThe app's 3D viewer can't show this model: {1}"), Base,
+				FText::FromString(Error.IsEmpty() ? FString(TEXT("the file couldn't be read.")) : Error)));
+			FileText->SetColorAndOpacity(FSlateColor(Warning));
+		}
+		if (PreviewSize) PreviewSize->SetHeightOverride(200.f);
+		return;
+	}
+	FActorSpawnParameters Params;
+	Params.ObjectFlags |= RF_Transient;
+	PreviewViewer = World->SpawnActor<AGFCModelViewer>(AGFCModelViewer::StaticClass(), FTransform::Identity, Params);
+	if (!PreviewViewer)
+	{
+		return;
+	}
+	PreviewViewer->ShowModel(*Model, GetDefault<UGFCApiSettings>()->MaxTextureSize, 768);
+	if (PreviewModelView)
+	{
+		PreviewModelView->SetViewer(PreviewViewer);
+		PreviewModelView->SetVisibility(ESlateVisibility::Visible);
+	}
+	if (PreviewImage) PreviewImage->SetColorAndOpacity(FLinearColor::Transparent);
+	if (FileText)
+	{
+		FNumberFormattingOptions O;
+		O.UseGrouping = true;
+		FText Info = FText::Format(LOCTEXT("ModelInfo", "{0}\n{1} triangles{2}. Drag to turn it; the thumbnail is the view when you post."),
+			Base, FText::AsNumber(Model->Triangles, &O),
+			Model->IsAnimated() ? FText::Format(LOCTEXT("Anim", ", animated ({0})"), FText::FromString(Model->Animations[0].Name)) : FText::GetEmpty());
+		FileText->SetText(Info);
+		FileText->SetColorAndOpacity(FSlateColor(TextDim));
+	}
+}
+
+void UGFCCreateScreen::ReleaseModelPreview()
+{
+	++PreviewSerial; // a parse still running is ignored
+	if (PreviewModelView)
+	{
+		PreviewModelView->SetViewer(nullptr);
+		PreviewModelView->SetVisibility(ESlateVisibility::Collapsed);
+	}
+	if (PreviewViewer)
+	{
+		PreviewViewer->Release();
+		PreviewViewer = nullptr;
+	}
+	if (PreviewSize) PreviewSize->SetHeightOverride(200.f);
 }
 
 void UGFCCreateScreen::SetUploading(bool bUploading)
@@ -309,6 +438,7 @@ void UGFCCreateScreen::SetUploading(bool bUploading)
 		if (S.Key) S.Key->SetIsEnabled(!bUploading && FGFCMediaCapture::IsSupported(S.Value));
 	}
 	if (RemoveMediaButton) RemoveMediaButton->SetIsEnabled(!bUploading);
+	if (HeaderPostButton && bUploading) HeaderPostButton->SetIsEnabled(false);
 	if (BodyBox) BodyBox->SetIsReadOnly(bUploading);
 	if (!bUploading) UpdatePostEnabled();
 }
@@ -355,6 +485,11 @@ void UGFCCreateScreen::HandlePost()
 	else if (Chosen.MimeType.StartsWith(TEXT("image/")))
 	{
 		Req.ThumbnailJpeg = FGFCMediaCapture::MakeImageThumbnail(Chosen.Path, 512);
+	}
+	else if (PreviewViewer)
+	{
+		// A 3D post's thumbnail is the preview as the user left it.
+		Req.ThumbnailJpeg = PreviewViewer->SnapshotJpeg();
 	}
 
 	SetUploading(true);
@@ -446,6 +581,7 @@ void UGFCCreateScreen::HandleViewPost()
 
 void UGFCCreateScreen::DiscardMedia()
 {
+	ReleaseModelPreview();
 	// Only temporary copies the app made are deleted; files the user picked on PC are theirs.
 	if (Chosen.bIsAppCopy)
 	{

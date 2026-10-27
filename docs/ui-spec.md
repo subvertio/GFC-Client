@@ -179,7 +179,7 @@ Thumbnail first. On tap, the full content plays in the app.
 | `CopyLinkButton` | Button | no | Copies `https://node.galacticfederation.tech/p/{id}` (opens the app via App Links). |
 | `BackButton` | Button | no | Back to the feed (or login when logged out). |
 | `PreviewImage` | Image | no | The thumbnail, then the full image or the video. |
-| `ModelView` | GFCModelView | no | The 3D view; created in code if absent. Drag: orbit. Pinch or wheel: zoom. Two fingers or right drag: pan. Double click: reset. |
+| `ModelView` | GFCModelView | no | The 3D view; created in code if absent. Turns slowly on its own (a turntable) and plays the model's first animation on a loop; a touch stops the turn, which resumes 4 s after letting go. Drag: orbit. Pinch or Ctrl + wheel: zoom (the plain wheel scrolls the page). Two fingers or right drag: pan. Double click: reset. |
 | `PreviewNote` | TextBlock | no | Over the preview: progress, gesture hints, errors such as "over the triangle limit". Its parent hides when empty. |
 | `OpenMediaButton` | Button | no | Only for kinds the app can't show ("Open the original file"). |
 | `OwnerText`, `DescriptionText`, `MetaText`, `ShareLinkText` | TextBlock | no | A text post's text is `DescriptionText`, at 18 pt. |
@@ -207,7 +207,8 @@ deleted after posting) with the text as its description, titled from its first l
 | `FileButton` | Button | no | "3D model or other file": the system file browser (`ACTION_OPEN_DOCUMENT`, any type), for `.glb`/`.gltf` and audio. |
 | `TitleBox` | EditableTextBox | yes | Prefilled with the file name when there's no text. Optional for text posts. |
 | `PostButton` | Button | yes | Uploads to `/seeds/upload`. Enabled once there's text or media. |
-| `MediaPanel`, `RemoveMediaButton` | any widget, Button | no | The chosen media's preview and details; hidden when there's none. Remove drops it. |
+| `MediaPanel`, `RemoveMediaButton` | any widget, Button | no | The chosen media's preview and details; hidden when there's none. Remove drops it. A 3D model previews live (turntable, animation, touch), checked against the phone budgets; the view when Post is tapped becomes the thumbnail. |
+| `HeaderPostButton` | Button | no | Post, in the "New post" header, so it's in reach however long the form is. Choosing media scrolls the form down to the title and Post. |
 | `PreviewImage`, `FileText` | Image, TextBlock | no | Preview (image, or the video's first frame); name, size, "Saved to your gallery", or the 200 MB limit. |
 | `UploadProgress`, `ProgressText`, `CancelButton` | ProgressBar, TextBlock, Button | no | "Uploading 12.3 MB of 48.0 MB". Cancel stops it. |
 | `ResultText`, `ViewPostButton` | TextBlock, Button | no | "Posted!", or "This looks like a repost of @original. They'll get the credit." |

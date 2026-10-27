@@ -28,6 +28,7 @@ public class GFCClient : ModuleRules
 		{
 			"ApplicationCore", // clipboard
 			"HTTP",
+			"ImageWrapper", // 3D preview thumbnails
 			"Json",
 		});
 	}

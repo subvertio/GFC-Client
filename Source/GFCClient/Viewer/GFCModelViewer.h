@@ -2,10 +2,12 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "GFCModelParser.h"
 #include "GFCModelViewer.generated.h"
 
 struct FGFCModelData;
 class UDirectionalLightComponent;
+class UPointLightComponent;
 class UMaterialInstanceDynamic;
 class UProceduralMeshComponent;
 class USceneCaptureComponent2D;
@@ -16,9 +18,15 @@ class UTextureRenderTarget2D;
  * Shows one runtime-loaded model. It lives far from anything else in the world
  * and renders into a render target that the seed detail screen displays.
  *
- * It only renders when the view changes (orbit, zoom, pan), never every frame,
- * which keeps phones cool. Release() frees the mesh, materials, textures and
- * render target; the cache subsystem calls it when the card is scrolled away.
+ * Animated models (a skinned glTF with an animation, like a walk cycle) play their first
+ * animation on a loop, skinned on the CPU at AutoSpinFps, walking on the spot.
+ * Like a turntable, the model turns slowly on its own (AutoSpinDegreesPerSecond) and
+ * stops the moment the user touches it; it picks up again a few seconds after they let
+ * go. While turning it renders at most AutoSpinFps; when still, only on a change.
+ * Lighting is three-point: a warm key, a cool fill and a rim light behind, all riding
+ * with the camera so whatever side faces the user is lit.
+ * Release() frees the mesh, materials, textures and render target; the cache subsystem
+ * calls it when the card is scrolled away.
  */
 UCLASS(NotPlaceable, Transient)
 class GFCCLIENT_API AGFCModelViewer : public AActor
@@ -31,14 +39,26 @@ public:
 	/** Builds the mesh. Textures are decoded and downscaled to MaxTextureSize. Game thread. */
 	void ShowModel(const FGFCModelData& Model, int32 MaxTextureSize, int32 RenderSize);
 
+	/** User gestures: each pauses the turntable. */
 	void Orbit(float DeltaYawDegrees, float DeltaPitchDegrees);
 	/** Factor < 1 zooms in. */
 	void Zoom(float Factor);
 	/** Screen-space pan, in fractions of the view. */
 	void Pan(float DeltaX, float DeltaY);
+	/** Back to the start pose; the turntable turns again. */
 	void ResetView();
 
+	/** The user is touching the model (finger down): hold the turntable still until they let go. */
+	void SetHeld(bool bInHeld);
+
+	static constexpr float AutoSpinDegreesPerSecond = 14.f;
+	static constexpr float AutoSpinResumeSeconds = 4.f;
+	static constexpr float AutoSpinFps = 30.f;
+
 	UTextureRenderTarget2D* GetRenderTarget() const { return RenderTarget; }
+
+	/** The view right now as a JPEG (the render target, read back once). Empty if nothing is shown. */
+	TArray<uint8> SnapshotJpeg(int32 Quality = 85);
 
 	/** For the debug overlay: triangles shown, and an estimate of mesh + texture + render target memory. */
 	int32 GetTriangleCount() const { return TriangleCount; }
@@ -54,11 +74,17 @@ public:
 
 private:
 	void UpdateCamera();
+	void UpdateLights();
+	/** Animated models: pose and skin the mesh at AnimTime. */
+	void UpdateAnimation();
+	void NoteInteraction() { IdleSeconds = 0.f; }
 	UMaterialInterface* BaseMaterial() const;
 
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UProceduralMeshComponent> Mesh;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USceneCaptureComponent2D> Capture;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UDirectionalLightComponent> KeyLight;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UPointLightComponent> FillLight;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UPointLightComponent> RimLight;
 	UPROPERTY(Transient) TObjectPtr<UTextureRenderTarget2D> RenderTarget;
 	UPROPERTY(Transient) TArray<TObjectPtr<UMaterialInstanceDynamic>> Materials;
 	UPROPERTY(Transient) TArray<TObjectPtr<UTexture2D>> Textures;
@@ -70,6 +96,14 @@ private:
 	float Pitch = -20.f;
 	float Distance = 300.f;
 	bool bDirty = false;
+	bool bHeld = false;
+	float IdleSeconds = 0.f;
+	float SpinCaptureTimer = 0.f;
+
+	/** Kept for animated models only (skinning needs the bind pose and weights every frame). */
+	TSharedPtr<FGFCModelData> Animated;
+	TArray<FMatrix44d> PoseScratch;
+	float AnimTime = 0.f;
 	int32 WarmupCaptures = 0;
 	int32 TriangleCount = 0;
 	int64 EstimatedBytes = 0;

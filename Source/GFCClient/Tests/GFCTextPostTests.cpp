@@ -13,11 +13,11 @@
 
 namespace
 {
-	constexpr EAutomationTestFlags Flags = EAutomationTestFlags::EditorContext | EAutomationTestFlags::ClientContext
+	constexpr EAutomationTestFlags TextPostFlags = EAutomationTestFlags::EditorContext | EAutomationTestFlags::ClientContext
 		| EAutomationTestFlags::EngineFilter;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGFCTextTitleTest, "GFC.Posting.TextTitleFromBody", Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGFCTextTitleTest, "GFC.Posting.TextTitleFromBody", TextPostFlags)
 bool FGFCTextTitleTest::RunTest(const FString&)
 {
 	TestEqual(TEXT("first line"), UGFCCreateScreen::TitleFromBody(TEXT("  Hello galaxy\r\nSecond line")), FString(TEXT("Hello galaxy")));
@@ -29,7 +29,7 @@ bool FGFCTextTitleTest::RunTest(const FString&)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGFCTextSeedFileTest, "GFC.Posting.TextSeedFile", Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGFCTextSeedFileTest, "GFC.Posting.TextSeedFile", TextPostFlags)
 bool FGFCTextSeedFileTest::RunTest(const FString&)
 {
 	const FString Body = TEXT("Welcome to the Federation ✨\nLine two");
@@ -56,7 +56,7 @@ bool FGFCTextSeedFileTest::RunTest(const FString&)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGFCFeedBodyTest, "GFC.Posting.FeedBodyShortened", Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGFCFeedBodyTest, "GFC.Posting.FeedBodyShortened", TextPostFlags)
 bool FGFCFeedBodyTest::RunTest(const FString&)
 {
 	TestEqual(TEXT("short kept"), UGFCSeedCard::FeedBody(TEXT("  hi \n"), 200), FString(TEXT("hi")));

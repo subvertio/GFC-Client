@@ -60,6 +60,7 @@ FReply UGFCModelView::NativeOnMouseButtonDown(const FGeometry& Geometry, const F
 	DragButton = Event.GetEffectingButton();
 	LastMouse = Event.GetScreenSpacePosition();
 	bGestureCounted = false;
+	Viewer->SetHeld(true); // the turntable waits while the model is in hand
 	return FReply::Handled().CaptureMouse(TakeWidget());
 }
 
@@ -68,6 +69,7 @@ FReply UGFCModelView::NativeOnMouseButtonUp(const FGeometry& Geometry, const FPo
 	if (HasMouseCapture())
 	{
 		DragButton = FKey();
+		if (Viewer.IsValid()) Viewer->SetHeld(false);
 		return FReply::Handled().ReleaseMouseCapture();
 	}
 	return FReply::Unhandled();
@@ -101,7 +103,8 @@ FReply UGFCModelView::NativeOnMouseMove(const FGeometry& Geometry, const FPointe
 
 FReply UGFCModelView::NativeOnMouseWheel(const FGeometry& Geometry, const FPointerEvent& Event)
 {
-	if (!Viewer.IsValid())
+	// The wheel scrolls the page (the view sits in a scroll box); Ctrl + wheel zooms. Phones pinch.
+	if (!Viewer.IsValid() || !Event.IsControlDown())
 	{
 		return FReply::Unhandled();
 	}
@@ -129,6 +132,7 @@ FReply UGFCModelView::NativeOnTouchStarted(const FGeometry& Geometry, const FPoi
 	}
 	Touches.Add(Event.GetPointerIndex(), Event.GetScreenSpacePosition());
 	bGestureCounted = false;
+	Viewer->SetHeld(true);
 	if (Touches.Num() == 2)
 	{
 		TArray<FVector2D> P;
@@ -181,6 +185,7 @@ FReply UGFCModelView::NativeOnTouchEnded(const FGeometry& Geometry, const FPoint
 	LastPinch = 0.f;
 	if (Touches.Num() == 0)
 	{
+		if (Viewer.IsValid()) Viewer->SetHeld(false);
 		return FReply::Handled().ReleaseMouseCapture();
 	}
 	return FReply::Handled();

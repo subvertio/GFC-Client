@@ -1,5 +1,6 @@
 #include "GFCModelParser.h"
 
+#include "Algo/BinarySearch.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "GFCApiSettings.h"
@@ -237,7 +238,49 @@ namespace
 		return true;
 	}
 
-	bool AddPrimitive(FCtx& C, const TSharedPtr<FJsonObject>& Prim, const FMatrix44d& World, FGFCModelData& Out)
+	/** JOINTS_0 / WEIGHTS_0 for a skinned primitive; false (not fatal) when they're missing or inconsistent. */
+	bool ReadSkinning(FCtx& C, const TSharedPtr<FJsonObject>& Attr, const FAccessor& Pos, int32 SkinIndex, const FGFCModelData& Out, FGFCModelSection& S)
+	{
+		if (!Out.Skins.IsValidIndex(SkinIndex))
+		{
+			return false;
+		}
+		const int32 JointCount = Out.Skins[SkinIndex].JointNodes.Num();
+		FAccessor J, W;
+		if (!ResolveAccessor(C, IntField(Attr, TEXT("JOINTS_0")), J) || !ResolveAccessor(C, IntField(Attr, TEXT("WEIGHTS_0")), W)
+			|| J.Components != 4 || W.Components != 4 || J.Count != Pos.Count || W.Count != Pos.Count)
+		{
+			C.Error.Reset();
+			return false;
+		}
+		S.SkinJoints.SetNumUninitialized(Pos.Count * 4);
+		S.SkinWeights.SetNumUninitialized(Pos.Count);
+		for (int32 i = 0; i < Pos.Count; ++i)
+		{
+			FVector4f Wt(float(W.Read(i, 0)), float(W.Read(i, 1)), float(W.Read(i, 2)), float(W.Read(i, 3)));
+			for (int32 k = 0; k < 4; ++k)
+			{
+				const double Joint = J.Read(i, k);
+				if (Joint < 0 || Joint >= JointCount)
+				{
+					return C.Fail(TEXT("A skinned mesh points at a joint that doesn't exist."));
+				}
+				S.SkinJoints[i * 4 + k] = uint16(Joint);
+				Wt[k] = FMath::Max(0.f, Wt[k]);
+			}
+			const float Sum = Wt.X + Wt.Y + Wt.Z + Wt.W;
+			S.SkinWeights[i] = Sum > UE_SMALL_NUMBER ? Wt / Sum : FVector4f(1.f, 0.f, 0.f, 0.f);
+		}
+		S.SkinPositions.SetNumUninitialized(Pos.Count);
+		for (int32 i = 0; i < Pos.Count; ++i)
+		{
+			S.SkinPositions[i] = FVector3f(float(Pos.Read(i, 0)), float(Pos.Read(i, 1)), float(Pos.Read(i, 2)));
+		}
+		S.Skin = SkinIndex;
+		return true;
+	}
+
+	bool AddPrimitive(FCtx& C, const TSharedPtr<FJsonObject>& Prim, const FMatrix44d& World, int32 SkinIndex, FGFCModelData& Out)
 	{
 		if (IntField(Prim, TEXT("mode"), 4) != 4)
 		{
@@ -276,6 +319,19 @@ namespace
 			}
 		}
 		C.Error.Reset(); // a bad optional attribute isn't fatal
+
+		if (SkinIndex >= 0 && ReadSkinning(C, *Attr, Pos, SkinIndex, Out, S) && Nrm.Count == Pos.Count && Nrm.Components == 3)
+		{
+			S.SkinNormals.SetNumUninitialized(Pos.Count);
+			for (int32 i = 0; i < Pos.Count; ++i)
+			{
+				S.SkinNormals[i] = FVector3f(float(Nrm.Read(i, 0)), float(Nrm.Read(i, 1)), float(Nrm.Read(i, 2)));
+			}
+		}
+		if (!C.Error.IsEmpty())
+		{
+			return false;
+		}
 
 		FAccessor UV;
 		const int32 UVIndex = IntField(*Attr, TEXT("TEXCOORD_0"));
@@ -348,6 +404,7 @@ namespace
 		}
 		const FMatrix44d World = NodeMatrix(Node) * Parent;
 		const int32 MeshIndex = IntField(Node, TEXT("mesh"));
+		const int32 SkinIndex = IntField(Node, TEXT("skin"));
 		if (MeshIndex >= 0)
 		{
 			const TSharedPtr<FJsonObject> Mesh = C.Item(TEXT("meshes"), MeshIndex);
@@ -357,7 +414,7 @@ namespace
 				for (const TSharedPtr<FJsonValue>& PV : *Prims)
 				{
 					const TSharedPtr<FJsonObject>* P = nullptr;
-					if (PV.IsValid() && PV->TryGetObject(P) && !AddPrimitive(C, *P, World, Out))
+					if (PV.IsValid() && PV->TryGetObject(P) && !AddPrimitive(C, *P, World, SkinIndex, Out))
 					{
 						return false;
 					}
@@ -372,6 +429,210 @@ namespace
 				if (!VisitNode(C, int32(Child->AsNumber()), World, Depth + 1, Visited, Out))
 				{
 					return false;
+				}
+			}
+		}
+		return true;
+	}
+
+	FMatrix44d ReadMatrix(const FAccessor& A, int32 Element)
+	{
+		FMatrix44d M;
+		for (int32 i = 0; i < 16; ++i)
+		{
+			M.M[i / 4][i % 4] = A.Read(Element, i); // column-major in, row-vector out: the same transpose as NodeMatrix
+		}
+		return M;
+	}
+
+	/** Every node's rest TRS and parent, the parents-first order, and the skins. Before geometry, which needs the skins. */
+	bool ReadRig(FCtx& C, const TArray<int32>& Roots, FGFCModelData& Out)
+	{
+		const FJsonArray* Nodes = C.Array(TEXT("nodes"));
+		if (!Nodes)
+		{
+			return true;
+		}
+		Out.Nodes.SetNum(Nodes->Num());
+		for (int32 i = 0; i < Nodes->Num(); ++i)
+		{
+			const TSharedPtr<FJsonObject> Node = C.Item(TEXT("nodes"), i);
+			if (!Node.IsValid())
+			{
+				continue;
+			}
+			const FTransform3d X(NodeMatrix(Node));
+			Out.Nodes[i].Translation = X.GetTranslation();
+			Out.Nodes[i].Rotation = X.GetRotation();
+			Out.Nodes[i].Scale = X.GetScale3D();
+			const FJsonArray* Children = nullptr;
+			if (Node->TryGetArrayField(TEXT("children"), Children))
+			{
+				for (const TSharedPtr<FJsonValue>& Ch : *Children)
+				{
+					const int32 Child = int32(Ch->AsNumber());
+					if (Out.Nodes.IsValidIndex(Child) && Child != i)
+					{
+						Out.Nodes[Child].Parent = i;
+					}
+				}
+			}
+		}
+		// Parents first, from the scene's roots; anything unreachable is never posed.
+		TSet<int32> Seen;
+		TArray<int32> Queue = Roots;
+		for (int32 q = 0; q < Queue.Num() && Seen.Num() <= C.Budget->MaxNodes; ++q)
+		{
+			const int32 N = Queue[q];
+			if (!Out.Nodes.IsValidIndex(N) || Seen.Contains(N))
+			{
+				continue;
+			}
+			Seen.Add(N);
+			Out.NodeOrder.Add(N);
+			const FJsonArray* Children = nullptr;
+			const TSharedPtr<FJsonObject> NodeObj = C.Item(TEXT("nodes"), N);
+			if (NodeObj.IsValid() && NodeObj->TryGetArrayField(TEXT("children"), Children))
+			{
+				for (const TSharedPtr<FJsonValue>& Ch : *Children) Queue.Add(int32(Ch->AsNumber()));
+			}
+		}
+
+		if (const FJsonArray* Skins = C.Array(TEXT("skins")))
+		{
+			for (int32 s = 0; s < Skins->Num(); ++s)
+			{
+				FGFCModelSkin& Skin = Out.Skins.AddDefaulted_GetRef();
+				const TSharedPtr<FJsonObject> SkinObj = C.Item(TEXT("skins"), s);
+				const FJsonArray* Joints = nullptr;
+				if (!SkinObj.IsValid() || !SkinObj->TryGetArrayField(TEXT("joints"), Joints) || Joints->Num() == 0)
+				{
+					continue;
+				}
+				if (Joints->Num() > C.Budget->MaxJoints)
+				{
+					return C.Fail(FString::Printf(TEXT("The model's skeleton has more than %d joints."), C.Budget->MaxJoints));
+				}
+				for (const TSharedPtr<FJsonValue>& J : *Joints)
+				{
+					const int32 Node = int32(J->AsNumber());
+					if (!Seen.Contains(Node))
+					{
+						return C.Fail(TEXT("The model's skeleton uses a node outside the scene."));
+					}
+					Skin.JointNodes.Add(Node);
+				}
+				Skin.InverseBind.Init(FMatrix44d::Identity, Skin.JointNodes.Num());
+				const int32 Ibm = IntField(SkinObj, TEXT("inverseBindMatrices"));
+				if (Ibm >= 0)
+				{
+					FAccessor A;
+					if (!ResolveAccessor(C, Ibm, A) || A.Components != 16 || A.Count < Skin.JointNodes.Num())
+					{
+						return C.Fail(TEXT("The model's skeleton has invalid bind matrices."));
+					}
+					for (int32 j = 0; j < Skin.JointNodes.Num(); ++j) Skin.InverseBind[j] = ReadMatrix(A, j);
+				}
+			}
+		}
+		return true;
+	}
+
+	bool ReadAnimations(FCtx& C, FGFCModelData& Out)
+	{
+		const FJsonArray* Anims = C.Array(TEXT("animations"));
+		if (!Anims || Out.Nodes.Num() == 0)
+		{
+			return true;
+		}
+		int64 Keys = 0;
+		for (int32 a = 0; a < Anims->Num() && Out.Animations.Num() < C.Budget->MaxAnimations; ++a)
+		{
+			const TSharedPtr<FJsonObject> AnimObj = C.Item(TEXT("animations"), a);
+			const FJsonArray* Channels = nullptr;
+			const FJsonArray* Samplers = nullptr;
+			if (!AnimObj.IsValid() || !AnimObj->TryGetArrayField(TEXT("channels"), Channels) || !AnimObj->TryGetArrayField(TEXT("samplers"), Samplers))
+			{
+				continue;
+			}
+			FGFCModelAnimation Anim;
+			AnimObj->TryGetStringField(TEXT("name"), Anim.Name);
+			for (const TSharedPtr<FJsonValue>& ChV : *Channels)
+			{
+				const TSharedPtr<FJsonObject>* Ch = nullptr;
+				const TSharedPtr<FJsonObject>* Target = nullptr;
+				if (!ChV.IsValid() || !ChV->TryGetObject(Ch) || !(*Ch)->TryGetObjectField(TEXT("target"), Target))
+				{
+					continue;
+				}
+				FString Path;
+				(*Target)->TryGetStringField(TEXT("path"), Path);
+				FGFCAnimationChannel Out1;
+				Out1.Node = IntField(*Target, TEXT("node"));
+				if (Path == TEXT("translation")) Out1.Path = FGFCAnimationChannel::EPath::Translation;
+				else if (Path == TEXT("rotation")) Out1.Path = FGFCAnimationChannel::EPath::Rotation;
+				else if (Path == TEXT("scale")) Out1.Path = FGFCAnimationChannel::EPath::Scale;
+				else continue; // morph weights: not played
+				const int32 SamplerIndex = IntField(*Ch, TEXT("sampler"));
+				const TSharedPtr<FJsonObject>* Sampler = nullptr;
+				if (!Out.Nodes.IsValidIndex(Out1.Node) || !Samplers->IsValidIndex(SamplerIndex) || !(*Samplers)[SamplerIndex]->TryGetObject(Sampler))
+				{
+					continue;
+				}
+				FString Interp = TEXT("LINEAR");
+				(*Sampler)->TryGetStringField(TEXT("interpolation"), Interp);
+				const bool bCubic = Interp == TEXT("CUBICSPLINE");
+				Out1.bStep = Interp == TEXT("STEP");
+				FAccessor In, Val;
+				const int32 Width = Out1.Path == FGFCAnimationChannel::EPath::Rotation ? 4 : 3;
+				if (!ResolveAccessor(C, IntField(*Sampler, TEXT("input")), In) || !ResolveAccessor(C, IntField(*Sampler, TEXT("output")), Val)
+					|| In.Components != 1 || Val.Components != Width || Val.Count != In.Count * (bCubic ? 3 : 1))
+				{
+					C.Error.Reset();
+					continue; // one broken channel doesn't stop the rest
+				}
+				Keys += In.Count;
+				if (Keys > C.Budget->MaxAnimationKeys)
+				{
+					return C.Fail(TEXT("The model's animation is too long for phones."));
+				}
+				Out1.Times.SetNumUninitialized(In.Count);
+				Out1.Values.SetNumUninitialized(In.Count);
+				for (int32 k = 0; k < In.Count; ++k)
+				{
+					Out1.Times[k] = float(In.Read(k, 0));
+					const int32 E = bCubic ? k * 3 + 1 : k; // cubic: in-tangent, value, out-tangent; the value is enough here
+					Out1.Values[k] = FVector4d(Val.Read(E, 0), Val.Read(E, 1), Val.Read(E, 2), Width == 4 ? Val.Read(E, 3) : 0.0);
+					if (k > 0 && Out1.Times[k] < Out1.Times[k - 1])
+					{
+						return C.Fail(TEXT("The model's animation keys are out of order."));
+					}
+				}
+				Anim.Duration = FMath::Max(Anim.Duration, Out1.Times.Last());
+				Anim.Channels.Add(MoveTemp(Out1));
+			}
+			if (Anim.Channels.Num() > 0 && Anim.Duration > 0.f)
+			{
+				Out.Animations.Add(MoveTemp(Anim));
+			}
+		}
+
+		// In place: a skeleton's root keeps its height (the bob of a walk) but not its travel.
+		TSet<int32> Joints;
+		for (const FGFCModelSkin& S : Out.Skins) Joints.Append(S.JointNodes);
+		for (FGFCModelAnimation& Anim : Out.Animations)
+		{
+			for (FGFCAnimationChannel& Ch : Anim.Channels)
+			{
+				const bool bRootJoint = Joints.Contains(Ch.Node) && !Joints.Contains(Out.Nodes[Ch.Node].Parent);
+				if (bRootJoint && Ch.Path == FGFCAnimationChannel::EPath::Translation && Ch.Values.Num() > 0)
+				{
+					const FVector4d First = Ch.Values[0];
+					for (FVector4d& V : Ch.Values)
+					{
+						V.X = First.X; // glTF X and Z are the ground plane
+						V.Z = First.Z;
+					}
 				}
 			}
 		}
@@ -544,6 +805,12 @@ bool FGFCModelParser::Parse(const TArray<uint8>& Bytes, const FGFCModelBudget& B
 		return Fail(FString::Printf(TEXT("The model has %lld triangles; the limit on phones is %d."), Triangles, Budget.MaxTriangles));
 	}
 
+	// ---- skeleton (geometry needs the skins) ----
+	if (!ReadRig(C, RootNodes, Out))
+	{
+		return Fail(C.Error);
+	}
+
 	// ---- geometry ----
 	TSet<int32> Visited;
 	for (const int32 N : RootNodes)
@@ -556,6 +823,10 @@ bool FGFCModelParser::Parse(const TArray<uint8>& Bytes, const FGFCModelBudget& B
 	if (Out.Sections.Num() == 0 || Out.Triangles == 0)
 	{
 		return Fail(TEXT("The model has no triangles to show."));
+	}
+	if (!ReadAnimations(C, Out))
+	{
+		return Fail(C.Error);
 	}
 
 	// ---- materials and images ----
@@ -629,4 +900,92 @@ bool FGFCModelParser::Parse(const TArray<uint8>& Bytes, const FGFCModelBudget& B
 		}
 	}
 	return true;
+}
+
+bool FGFCModelData::IsAnimated() const
+{
+	return Animations.Num() > 0 && Sections.ContainsByPredicate([](const FGFCModelSection& S) { return S.Skin >= 0; });
+}
+
+namespace
+{
+	FVector4d Sample(const FGFCAnimationChannel& Ch, float T)
+	{
+		const TArray<float>& Times = Ch.Times;
+		if (T <= Times[0] || Times.Num() == 1) return Ch.Values[0];
+		if (T >= Times.Last()) return Ch.Values.Last();
+		const int32 Next = Algo::UpperBound(Times, T);
+		const int32 Prev = Next - 1;
+		if (Ch.bStep) return Ch.Values[Prev];
+		const float Span = Times[Next] - Times[Prev];
+		const double Alpha = Span > 0.f ? (T - Times[Prev]) / Span : 0.0;
+		const FVector4d& A = Ch.Values[Prev];
+		const FVector4d& B = Ch.Values[Next];
+		if (Ch.Path == FGFCAnimationChannel::EPath::Rotation)
+		{
+			const FQuat4d Q = FQuat4d::Slerp(FQuat4d(A.X, A.Y, A.Z, A.W), FQuat4d(B.X, B.Y, B.Z, B.W), Alpha);
+			return FVector4d(Q.X, Q.Y, Q.Z, Q.W);
+		}
+		return A + (B - A) * Alpha;
+	}
+}
+
+void FGFCModelPose::Evaluate(const FGFCModelData& Model, int32 Animation, float Time, TArray<FMatrix44d>& OutGlobals)
+{
+	TArray<FGFCModelNode> Pose = Model.Nodes;
+	if (const FGFCModelAnimation* Anim = Model.Animations.IsValidIndex(Animation) ? &Model.Animations[Animation] : nullptr)
+	{
+		const float T = Anim->Duration > 0.f ? FMath::Fmod(FMath::Max(0.f, Time), Anim->Duration) : 0.f;
+		for (const FGFCAnimationChannel& Ch : Anim->Channels)
+		{
+			const FVector4d V = Sample(Ch, T);
+			FGFCModelNode& N = Pose[Ch.Node];
+			switch (Ch.Path)
+			{
+			case FGFCAnimationChannel::EPath::Translation: N.Translation = FVector3d(V.X, V.Y, V.Z); break;
+			case FGFCAnimationChannel::EPath::Rotation: N.Rotation = FQuat4d(V.X, V.Y, V.Z, V.W).GetNormalized(); break;
+			case FGFCAnimationChannel::EPath::Scale: N.Scale = FVector3d(V.X, V.Y, V.Z); break;
+			}
+		}
+	}
+	OutGlobals.Init(FMatrix44d::Identity, Model.Nodes.Num());
+	for (const int32 N : Model.NodeOrder) // parents first
+	{
+		const FGFCModelNode& P = Pose[N];
+		const FMatrix44d Local = FTransform3d(P.Rotation, P.Translation, P.Scale).ToMatrixWithScale();
+		OutGlobals[N] = Model.Nodes.IsValidIndex(P.Parent) ? Local * OutGlobals[P.Parent] : Local;
+	}
+}
+
+void FGFCModelPose::SkinSection(const FGFCModelData& Model, const FGFCModelSection& S, const TArray<FMatrix44d>& Globals,
+	TArray<FVector>& OutPositions, TArray<FVector>& OutNormals)
+{
+	const FGFCModelSkin& Skin = Model.Skins[S.Skin];
+	TArray<FMatrix44f> JointMats;
+	JointMats.SetNumUninitialized(Skin.JointNodes.Num());
+	for (int32 j = 0; j < Skin.JointNodes.Num(); ++j)
+	{
+		// glTF: the skinned mesh node's own transform is ignored; joints place the vertices.
+		JointMats[j] = FMatrix44f(Skin.InverseBind[j] * Globals[Skin.JointNodes[j]]);
+	}
+	const int32 Count = S.SkinPositions.Num();
+	const bool bNormals = S.SkinNormals.Num() == Count;
+	OutPositions.SetNumUninitialized(Count);
+	OutNormals.SetNumUninitialized(bNormals ? Count : 0);
+	for (int32 i = 0; i < Count; ++i)
+	{
+		const FVector4f& W = S.SkinWeights[i];
+		const uint16* J = &S.SkinJoints[i * 4];
+		FMatrix44f M = JointMats[J[0]] * W.X;
+		if (W.Y > 0.f) M += JointMats[J[1]] * W.Y;
+		if (W.Z > 0.f) M += JointMats[J[2]] * W.Z;
+		if (W.W > 0.f) M += JointMats[J[3]] * W.W;
+		const FVector3f P = M.TransformPosition(S.SkinPositions[i]);
+		OutPositions[i] = FVector(-P.Z * 100.f, P.X * 100.f, P.Y * 100.f); // glTF metres, Y up -> Unreal cm, Z up
+		if (bNormals)
+		{
+			const FVector3f N = M.TransformVector(S.SkinNormals[i]).GetSafeNormal();
+			OutNormals[i] = FVector(-N.Z, N.X, N.Y);
+		}
+	}
 }

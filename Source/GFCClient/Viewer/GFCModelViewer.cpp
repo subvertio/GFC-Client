@@ -1,12 +1,17 @@
 #include "Viewer/GFCModelViewer.h"
 
 #include "Components/DirectionalLightComponent.h"
+#include "Components/PointLightComponent.h"
 #include "Components/SceneCaptureComponent2D.h"
 #include "Engine/Engine.h"
 #include "Engine/Texture2D.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "GFCCacheSubsystem.h"
 #include "GFCModelParser.h"
+#include "IImageWrapper.h"
+#include "IImageWrapperModule.h"
+#include "Modules/ModuleManager.h"
+#include "TextureResource.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "ProceduralMeshComponent.h"
 
@@ -54,13 +59,46 @@ AGFCModelViewer::AGFCModelViewer()
 	Capture->PostProcessSettings.AutoExposureApplyPhysicalCameraExposure = false;
 	Capture->PostProcessBlendWeight = 1.f;
 
-	// The key light rides with the camera so the visible side is always lit.
+	// Three-point lighting riding with the camera. The mobile renderer takes one directional
+	// light, so the key is directional and the fill and rim are point lights (placed per model).
 	KeyLight = CreateDefaultSubobject<UDirectionalLightComponent>(TEXT("KeyLight"));
 	KeyLight->SetupAttachment(Capture);
-	KeyLight->SetRelativeRotation(FRotator(-25.f, 20.f, 0.f));
-	KeyLight->SetIntensity(6.f);
+	KeyLight->SetRelativeRotation(FRotator(-30.f, 35.f, 0.f)); // from above, camera left
+	KeyLight->SetIntensity(5.f);
+	KeyLight->SetLightColor(FLinearColor(1.f, 0.95f, 0.88f)); // warm
 	KeyLight->SetCastShadows(false);
 	KeyLight->SetMobility(EComponentMobility::Movable);
+
+	auto MakePoint = [this](const TCHAR* Name, const FLinearColor& Color)
+	{
+		UPointLightComponent* L = CreateDefaultSubobject<UPointLightComponent>(Name);
+		L->SetupAttachment(Capture);
+		L->SetIntensityUnits(ELightUnits::Candelas);
+		L->SetLightColor(Color);
+		L->SetCastShadows(false);
+		L->SetMobility(EComponentMobility::Movable);
+		L->bUseInverseSquaredFalloff = true;
+		return L;
+	};
+	FillLight = MakePoint(TEXT("FillLight"), FLinearColor(0.78f, 0.86f, 1.f)); // cool, softer, camera right
+	RimLight = MakePoint(TEXT("RimLight"), FLinearColor(1.f, 1.f, 1.f));     // behind and above: edges glow
+}
+
+void AGFCModelViewer::UpdateLights()
+{
+	// Placed in camera space around the model and scaled with its size, so a 2 cm ring and
+	// a 20 m ship get the same look. Candelas = lux * metres^2 at the model.
+	const float D = Distance, R = Radius;
+	auto Place = [&](UPointLightComponent* L, const FVector& CameraSpace, float Lux)
+	{
+		const float Metres = CameraSpace.Size() / 100.f;
+		L->SetRelativeLocation(CameraSpace);
+		L->SetIntensity(Lux * Metres * Metres);
+		L->SetAttenuationRadius((CameraSpace.Size() + R) * 3.f);
+	};
+	// Camera space: X forward (towards the model), Y right, Z up. The model sits at X = D.
+	Place(FillLight, FVector(D * 0.3f, D * 0.8f, -R * 0.2f), 1.6f);
+	Place(RimLight, FVector(D + R * 2.2f, -R * 0.8f, R * 1.6f), 4.f);
 }
 
 UMaterialInterface* AGFCModelViewer::BaseMaterial() const
@@ -146,7 +184,37 @@ void AGFCModelViewer::ShowModel(const FGFCModelData& Model, int32 MaxTextureSize
 	Radius = FMath::Max(1.f, float(Model.Bounds.GetExtent().Size()));
 	// The mesh's render proxy appears a frame or two later: keep capturing briefly.
 	WarmupCaptures = 20;
+
+	Animated.Reset();
+	AnimTime = 0.f;
+	if (Model.IsAnimated())
+	{
+		// Keep what skinning needs (not the images: those are textures now).
+		Animated = MakeShared<FGFCModelData>();
+		Animated->Sections = Model.Sections;
+		Animated->Nodes = Model.Nodes;
+		Animated->NodeOrder = Model.NodeOrder;
+		Animated->Skins = Model.Skins;
+		Animated->Animations = Model.Animations;
+		UpdateAnimation();
+	}
 	ResetView();
+}
+void AGFCModelViewer::UpdateAnimation()
+{
+	FGFCModelPose::Evaluate(*Animated, 0, AnimTime, PoseScratch);
+	TArray<FVector> Positions, Normals;
+	for (int32 i = 0; i < Animated->Sections.Num(); ++i)
+	{
+		const FGFCModelSection& S = Animated->Sections[i];
+		if (S.Skin < 0)
+		{
+			continue;
+		}
+		FGFCModelPose::SkinSection(*Animated, S, PoseScratch, Positions, Normals);
+		Mesh->UpdateMeshSection_LinearColor(i, Positions, Normals, {}, {}, {});
+	}
+	bDirty = true;
 }
 
 void AGFCModelViewer::ResetView()
@@ -154,14 +222,23 @@ void AGFCModelViewer::ResetView()
 	Yaw = 35.f;
 	Pitch = -20.f;
 	PanOffset = FVector::ZeroVector;
-	Distance = Radius / FMath::Tan(FMath::DegreesToRadians(FovDegrees * 0.5f)) * 1.15f;
+	// Radius is the box's half-diagonal, which overstates most shapes: 0.85 fills the frame without clipping.
+	Distance = Radius / FMath::Tan(FMath::DegreesToRadians(FovDegrees * 0.5f)) * 0.85f;
+	IdleSeconds = AutoSpinResumeSeconds; // turn straight away
 	UpdateCamera();
+}
+
+void AGFCModelViewer::SetHeld(bool bInHeld)
+{
+	bHeld = bInHeld;
+	NoteInteraction();
 }
 
 void AGFCModelViewer::Orbit(float DeltaYawDegrees, float DeltaPitchDegrees)
 {
 	Yaw += DeltaYawDegrees;
 	Pitch = FMath::Clamp(Pitch + DeltaPitchDegrees, -85.f, 85.f);
+	NoteInteraction();
 	UpdateCamera();
 }
 
@@ -169,6 +246,7 @@ void AGFCModelViewer::Zoom(float Factor)
 {
 	const float Fit = Radius / FMath::Tan(FMath::DegreesToRadians(FovDegrees * 0.5f));
 	Distance = FMath::Clamp(Distance * Factor, Fit * 0.15f, Fit * 6.f);
+	NoteInteraction();
 	UpdateCamera();
 }
 
@@ -178,6 +256,7 @@ void AGFCModelViewer::Pan(float DeltaX, float DeltaY)
 	const float ViewSize = 2.f * Distance * FMath::Tan(FMath::DegreesToRadians(FovDegrees * 0.5f));
 	PanOffset += (-FRotationMatrix(Rot).GetUnitAxis(EAxis::Y) * DeltaX + FRotationMatrix(Rot).GetUnitAxis(EAxis::Z) * DeltaY) * ViewSize;
 	PanOffset = PanOffset.GetClampedToMaxSize(Radius * 2.f);
+	NoteInteraction();
 	UpdateCamera();
 }
 
@@ -186,12 +265,39 @@ void AGFCModelViewer::UpdateCamera()
 	const FRotator Rot(Pitch, Yaw, 0.f);
 	const FVector Target = Center + PanOffset;
 	Capture->SetRelativeLocationAndRotation(Target - Rot.Vector() * Distance, Rot);
+	UpdateLights();
 	bDirty = true;
 }
 
 void AGFCModelViewer::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	if (RenderTarget)
+	{
+		const float Dt = FMath::Min(DeltaSeconds, 0.1f);
+		if (!bHeld) IdleSeconds += DeltaSeconds;
+		const bool bSpin = !bHeld && IdleSeconds >= AutoSpinResumeSeconds;
+		if (bSpin)
+		{
+			// The turntable: steady and slow.
+			Yaw = FMath::Fmod(Yaw + AutoSpinDegreesPerSecond * Dt, 360.f);
+		}
+		if (Animated.IsValid())
+		{
+			AnimTime += Dt; // keeps walking while the user turns it
+		}
+		// Motion renders at a capped rate to keep the phone cool.
+		if (bSpin || Animated.IsValid())
+		{
+			SpinCaptureTimer += DeltaSeconds;
+			if (SpinCaptureTimer >= 1.f / AutoSpinFps)
+			{
+				SpinCaptureTimer = 0.f;
+				if (Animated.IsValid()) UpdateAnimation();
+				UpdateCamera();
+			}
+		}
+	}
 	if ((bDirty || WarmupCaptures > 0) && RenderTarget)
 	{
 		bDirty = false;
@@ -200,8 +306,34 @@ void AGFCModelViewer::Tick(float DeltaSeconds)
 	}
 }
 
+TArray<uint8> AGFCModelViewer::SnapshotJpeg(int32 Quality)
+{
+	if (!RenderTarget)
+	{
+		return {};
+	}
+	Capture->CaptureScene(); // the current pose and angle, not the last throttled frame
+	FTextureRenderTargetResource* Resource = RenderTarget->GameThread_GetRenderTargetResource();
+	TArray<FColor> Pixels;
+	if (!Resource || !Resource->ReadPixels(Pixels) || Pixels.Num() != RenderTarget->SizeX * RenderTarget->SizeY)
+	{
+		return {};
+	}
+	for (FColor& P : Pixels) P.A = 255;
+	IImageWrapperModule& IW = FModuleManager::LoadModuleChecked<IImageWrapperModule>(TEXT("ImageWrapper"));
+	TSharedPtr<IImageWrapper> Jpeg = IW.CreateImageWrapper(EImageFormat::JPEG);
+	if (!Jpeg.IsValid() || !Jpeg->SetRaw(Pixels.GetData(), int64(Pixels.Num()) * 4, RenderTarget->SizeX, RenderTarget->SizeY, ERGBFormat::BGRA, 8))
+	{
+		return {};
+	}
+	const TArray64<uint8>& Out = Jpeg->GetCompressed(Quality);
+	return TArray<uint8>(Out.GetData(), int32(Out.Num()));
+}
+
 void AGFCModelViewer::Release()
 {
+	Animated.Reset();
+	PoseScratch.Empty();
 	Mesh->ClearAllMeshSections();
 	Capture->TextureTarget = nullptr;
 	Capture->ShowOnlyComponents.Reset();
