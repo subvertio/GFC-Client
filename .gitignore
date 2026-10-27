@@ -32,3 +32,7 @@ Packaged/
 # Never commit session data or wallet backups
 *.sav
 *-wallet-backup-*.json
+
+# Cook and packaging byproducts
+Build/Android_*/
+Packaged/
