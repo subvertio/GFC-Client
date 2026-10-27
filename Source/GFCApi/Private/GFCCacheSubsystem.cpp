@@ -328,15 +328,27 @@ void UGFCCacheSubsystem::FetchFile(const FString& Url, const FString& Owner, int
 			Store->BeginHeavy(Owner);
 		}
 	}
+	StartFetch(Url, Owner, Cap, MoveTemp(Done), MoveTemp(Progress), true);
+}
 
+FString UGFCCacheSubsystem::CacheExtensionFor(const FString& UrlExtension, bool bAndroidMedia)
+{
+	static const TSet<FString> PlatformPlayerOnly = {TEXT("m4a"), TEXT("mp3"), TEXT("ogg"), TEXT("oga"), TEXT("opus"),
+		TEXT("flac"), TEXT("mov"), TEXT("m4v"), TEXT("mkv"), TEXT("3gp")};
+	const FString Ext = UrlExtension.ToLower();
+	return bAndroidMedia && PlatformPlayerOnly.Contains(Ext) ? FString(TEXT("mp4")) : Ext;
+}
+
+void UGFCCacheSubsystem::StartFetch(const FString& Url, const FString& Owner, int64 Cap, FOnFile Done, FOnFileProgress Progress,
+	bool bRetry)
+{
 	const TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
 	Request->SetURL(Url);
 	Request->SetVerb(TEXT("GET"));
 	Request->SetTimeout(GetDefault<UGFCApiSettings>()->ModelLoadTimeoutSeconds);
 
 	// The body goes straight to its file as it arrives: nothing big is ever held in memory.
-	const FString Ext = ExtensionOf(Url);
-	const FString Path = Store->MakeFilePath(Owner, Ext);
+	const FString Path = Store->MakeFilePath(Owner, CacheExtensionFor(ExtensionOf(Url)));
 	TSharedRef<FGFCFileSink> Sink = MakeShared<FGFCFileSink>(Path);
 	if (!Sink->IsOpen())
 	{
@@ -367,7 +379,7 @@ void UGFCCacheSubsystem::FetchFile(const FString& Url, const FString& Owner, int
 
 	TWeakObjectPtr<UGFCCacheSubsystem> WeakThis(this);
 	Request->OnProcessRequestComplete().BindLambda(
-		[WeakThis, Owner, Cap, Path, Sink, bTooBig, Done = MoveTemp(Done)](FHttpRequestPtr Req, FHttpResponsePtr Resp, bool bConnected)
+		[WeakThis, Url, Owner, Cap, Path, Sink, bTooBig, Done = MoveTemp(Done), Progress, bRetry](FHttpRequestPtr Req, FHttpResponsePtr Resp, bool bConnected) mutable
 		{
 			Sink->Close();
 			const int64 Bytes = Sink->Written();
@@ -389,6 +401,15 @@ void UGFCCacheSubsystem::FetchFile(const FString& Url, const FString& Owner, int
 			}
 			if (Req->GetStatus() == EHttpRequestStatus::Failed && !bConnected && !Resp.IsValid())
 			{
+				// A pooled connection that died while the phone slept or changed networks fails once
+				// (a 30 s connect timeout); a fresh attempt connects straight away.
+				if (bRetry && Bytes == 0 && Req->GetFailureReason() == EHttpFailureReason::ConnectionError)
+				{
+					IFileManager::Get().Delete(*Path, false, true, true);
+					UE_LOG(LogGFCApi, Log, TEXT("Download couldn't connect; trying once more"));
+					WeakThis->StartFetch(Url, Owner, Cap, MoveTemp(Done), MoveTemp(Progress), false);
+					return;
+				}
 				Fail(Req->GetFailureReason() == EHttpFailureReason::Cancelled ? EGFCFetchResult::Cancelled : EGFCFetchResult::NetworkError);
 				return;
 			}

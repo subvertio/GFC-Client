@@ -8,6 +8,7 @@
 #include "GFCApiClient.h"
 #include "GFCApiSettings.h"
 #include "GFCCacheStore.h"
+#include "GFCCacheSubsystem.h"
 #include "GFCDeepLink.h"
 #include "GFCModelParser.h"
 #include "GFCViewTracker.h"
@@ -196,6 +197,23 @@ bool FGFCViewTrackerTest::RunTest(const FString&)
 		T.Begin(TEXT("tuned"), EGFCMediaKind::Image, false);
 		TestTrue(TEXT("thresholds are tunable"), Run(T, 0.6f, true, true));
 	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGFCCacheNameTest, "GFC.Mobile.CacheFileNames", Flags)
+bool FGFCCacheNameTest::RunTest(const FString&)
+{
+	// Unreal's Android media plugin only opens .mp4/.aac/.3gpp/.webm/.m3u8 by name; Android's player reads the content.
+	for (const TCHAR* Ext : {TEXT("m4a"), TEXT("M4A"), TEXT("mp3"), TEXT("ogg"), TEXT("oga"), TEXT("opus"), TEXT("flac"),
+		TEXT("mov"), TEXT("m4v"), TEXT("mkv"), TEXT("3gp")})
+	{
+		TestEqual(FString::Printf(TEXT(".%s saved as .mp4 on Android"), Ext), UGFCCacheSubsystem::CacheExtensionFor(Ext, true), FString(TEXT("mp4")));
+	}
+	for (const TCHAR* Ext : {TEXT("mp4"), TEXT("aac"), TEXT("webm"), TEXT("wav"), TEXT("glb"), TEXT("png"), TEXT("txt")})
+	{
+		TestEqual(FString::Printf(TEXT(".%s keeps its name on Android"), Ext), UGFCCacheSubsystem::CacheExtensionFor(Ext, true), FString(Ext));
+	}
+	TestEqual(TEXT("other platforms keep .m4a"), UGFCCacheSubsystem::CacheExtensionFor(TEXT("m4a"), false), FString(TEXT("m4a")));
 	return true;
 }
 

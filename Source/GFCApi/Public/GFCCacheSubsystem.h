@@ -95,7 +95,16 @@ public:
 	/** The app's private, OS-clearable cache folder ("…/GFCCache"). */
 	static FString GetCacheRoot();
 
+	/**
+	 * The extension a download of UrlExtension is saved under. Unreal's Android media plugin refuses files
+	 * by name (only mp4, aac, 3gpp, webm, m3u8), while Android's player itself reads the content, so on
+	 * Android the other formats it plays (m4a, mp3, ogg, opus, flac, mov, m4v, mkv, 3gp) are saved as .mp4.
+	 * WAV keeps its name: it plays in the engine, not the platform player.
+	 */
+	static FString CacheExtensionFor(const FString& UrlExtension, bool bAndroidMedia = PLATFORM_ANDROID != 0);
+
 private:
+	void StartFetch(const FString& Url, const FString& Owner, int64 Cap, FOnFile Done, FOnFileProgress Progress, bool bRetry);
 	void DropTextures(const TArray<FString>& Keys);
 	void HandleSessionChanged();
 	void HandleBackground();
