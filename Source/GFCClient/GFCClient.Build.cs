@@ -6,6 +6,26 @@ public class GFCClient : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "GFCApi" });
+		// Headers live beside sources (UI/...), not in Public/Private.
+		PublicIncludePaths.Add(ModuleDirectory);
+
+		PublicDependencyModuleNames.AddRange(new string[]
+		{
+			"Core",
+			"CoreUObject",
+			"Engine",
+			"InputCore",
+			"UMG",
+			"Slate",
+			"SlateCore",
+			"GFCApi",
+		});
+
+		PrivateDependencyModuleNames.AddRange(new string[]
+		{
+			"ApplicationCore", // clipboard
+			"HTTP",
+			"Json",
+		});
 	}
 }
