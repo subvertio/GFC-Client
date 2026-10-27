@@ -31,11 +31,17 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UEditableTextBox> NodeUrlBox;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> UseNodeButton;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> NodeText;
+	/** Node presets: the live network, and a test node on the PC reached over USB (adb reverse tcp:8100 tcp:8100). */
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> LiveNodeButton;
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> LocalNodeButton;
 
 private:
 	UFUNCTION() void HandleLogin();
 	UFUNCTION() void HandleRegister();
 	UFUNCTION() void HandleUseNode();
+	UFUNCTION() void HandleLiveNode();
+	UFUNCTION() void HandleLocalNode();
+	void SwitchNode(const FString& Url);
 	UFUNCTION() void HandlePasswordCommitted(const FText& Text, ETextCommit::Type Method);
 
 	void SetBusy(bool bBusy);

@@ -10,6 +10,7 @@
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "GFCApiClient.h"
+#include "GFCApiSettings.h"
 #include "GFCApiSubsystem.h"
 #include "UI/GFCRootWidget.h"
 #include "UI/GFCUIStyle.h"
@@ -54,7 +55,13 @@ void UGFCLoginScreen::BuildDefaultLayout()
 		12, Warning), 22.f);
 
 	NodeText = MakeText(T, FText::GetEmpty(), 11, TextDim);
-	AddV(Col, NodeText, 4.f);
+	AddV(Col, NodeText, 6.f);
+	UHorizontalBox* Presets = MakeRow(T);
+	LiveNodeButton = MakeButton(T, LOCTEXT("Live", "Live node"), PanelRaised);
+	LocalNodeButton = MakeButton(T, LOCTEXT("Local", "Test node (USB)"), PanelRaised);
+	AddH(Presets, LiveNodeButton, 8.f, true);
+	AddH(Presets, LocalNodeButton, 0.f, true);
+	AddV(Col, Presets, 10.f);
 	NodeUrlBox = MakeInput(T, LOCTEXT("NodeHint", "https://node.galacticfederation.tech"));
 	UseNodeButton = MakeButton(T, LOCTEXT("UseNode", "Use this node"), PanelRaised);
 	AddV(Col, NodeUrlBox, 8.f);
@@ -66,6 +73,8 @@ void UGFCLoginScreen::BindEvents()
 	if (LoginButton) LoginButton->OnClicked.AddDynamic(this, &ThisClass::HandleLogin);
 	if (RegisterButton) RegisterButton->OnClicked.AddDynamic(this, &ThisClass::HandleRegister);
 	if (UseNodeButton) UseNodeButton->OnClicked.AddDynamic(this, &ThisClass::HandleUseNode);
+	if (LiveNodeButton) LiveNodeButton->OnClicked.AddDynamic(this, &ThisClass::HandleLiveNode);
+	if (LocalNodeButton) LocalNodeButton->OnClicked.AddDynamic(this, &ThisClass::HandleLocalNode);
 	if (PasswordBox) PasswordBox->OnTextCommitted.AddDynamic(this, &ThisClass::HandlePasswordCommitted);
 }
 
@@ -180,14 +189,33 @@ void UGFCLoginScreen::HandleRegister()
 	});
 }
 
+void UGFCLoginScreen::HandleLiveNode()
+{
+	SwitchNode(UGFCApiSettings::DefaultNodeBaseUrl);
+}
+
+void UGFCLoginScreen::HandleLocalNode()
+{
+	// On the phone, 127.0.0.1:8100 reaches the PC's test node through `adb reverse tcp:8100 tcp:8100`.
+	SwitchNode(TEXT("http://127.0.0.1:8100"));
+}
+
 void UGFCLoginScreen::HandleUseNode()
 {
+	if (NodeUrlBox)
+	{
+		SwitchNode(NodeUrlBox->GetText().ToString());
+	}
+}
+
+void UGFCLoginScreen::SwitchNode(const FString& Url)
+{
 	UGFCApiSubsystem* A = Api();
-	if (!A || !NodeUrlBox)
+	if (!A)
 	{
 		return;
 	}
-	if (A->SetNode(NodeUrlBox->GetText().ToString()))
+	if (A->SetNode(Url))
 	{
 		ShowStatus(FText::Format(LOCTEXT("NodeSet", "Using node {0}."), FText::FromString(A->GetClient()->GetBaseUrl())));
 	}
