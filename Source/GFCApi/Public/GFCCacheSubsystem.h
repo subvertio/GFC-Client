@@ -43,6 +43,8 @@ class GFCAPI_API UGFCCacheSubsystem : public UGameInstanceSubsystem
 public:
 	using FOnTexture = TFunction<void(UTexture2D* Texture)>;
 	using FOnFile = TFunction<void(EGFCFetchResult Result, const FString& Path, int64 Bytes)>;
+	/** While a file downloads: where it's going and how many bytes are on disk so far (readable now). */
+	using FOnFileProgress = TFunction<void(const FString& Path, int64 BytesOnDisk)>;
 
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void Deinitialize() override;
@@ -54,11 +56,14 @@ public:
 	void SetVisibleThumbnails(const TSet<FString>& Urls);
 
 	/**
-	 * Downloads full media or a model to a temp file owned by Owner (e.g. "seed:<id>").
+	 * Downloads full media or a model to a temp file owned by Owner (e.g. "seed:<id>"). The body is
+	 * streamed to disk as it arrives (never held in memory), and Progress reports the bytes written so
+	 * a player can start reading the file before the download ends.
 	 * bHeavy: this becomes the one live heavy item; the previous one is released first.
 	 * Fails without filling the device if the file is over MaxBytes or space is low.
 	 */
-	void FetchFile(const FString& Url, const FString& Owner, int64 MaxBytes, bool bHeavy, FOnFile Done);
+	void FetchFile(const FString& Url, const FString& Owner, int64 MaxBytes, bool bHeavy, FOnFile Done,
+		FOnFileProgress Progress = nullptr);
 
 	/** Size of a download from a HEAD request (-1 if unknown), to ask before big downloads on mobile data. */
 	void QuerySize(const FString& Url, TFunction<void(int64 Bytes)> Done);
@@ -94,6 +99,8 @@ private:
 	void DropTextures(const TArray<FString>& Keys);
 	void HandleSessionChanged();
 	void HandleBackground();
+	/** Routine engine memory trim: drops off-screen thumbnails only, keeps the live item (a playing track or video). */
+	void HandleMemoryTrim();
 	bool TickOverlay(float DeltaTime);
 
 	TUniquePtr<FGFCCacheStore> Store;

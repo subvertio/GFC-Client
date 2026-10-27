@@ -87,7 +87,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Editor build failed.' }
 $uat = Join-Path $EngineDir 'Engine\Build\BatchFiles\RunUAT.bat'
 $uatArgs = @("-project=$project", '-platform=Android', '-cookflavor=ASTC', "-clientconfig=$Config",
     '-build', '-cook', '-stage', '-pak', '-package', '-archive', "-archivedirectory=$archive",
-    '-nocompileeditor', "-ubtargs=-MaxParallelActions=$Jobs", '-nop4', '-utf8output', '-unattended')
+    '-nocompileeditor', "-ubtargs=-MaxParallelActions=$Jobs -WaitMutex", '-nop4', '-utf8output', '-unattended',
+    '-WaitForUATMutex') # queue behind another Unreal build on this PC instead of failing
 try {
     if ($Release) {
         # -distribution makes Unreal sign with the release key instead of the debug one.

@@ -1,12 +1,16 @@
 #include "GFCCacheSubsystem.h"
 
+#include <atomic>
+
 #include "Engine/Engine.h"
 #include "Engine/Texture2D.h"
 #include "GFCApi.h"
 #include "GFCApiClient.h"
 #include "GFCApiSettings.h"
 #include "GFCApiSubsystem.h"
+#include "HAL/FileManager.h"
 #include "HAL/IConsoleManager.h"
+#include "HAL/PlatformFileManager.h"
 #include "HttpModule.h"
 #include "IImageWrapper.h"
 #include "IImageWrapperModule.h"
@@ -27,6 +31,40 @@ namespace
 	constexpr int64 MaxThumbnailFileBytes = 4 * 1024 * 1024;
 	constexpr int32 MaxThumbnailSize = 512;
 	bool GShowOverlay = false;
+
+	/**
+	 * The HTTP body, written straight to a file (on the HTTP thread) and flushed per chunk, so the
+	 * file can be read while it grows. Written() is safe from any thread.
+	 */
+	class FGFCFileSink : public FArchive
+	{
+	public:
+		explicit FGFCFileSink(const FString& Path)
+		{
+			SetIsSaving(true);
+			Handle.Reset(FPlatformFileManager::Get().GetPlatformFile().OpenWrite(*Path, false, true));
+		}
+		bool IsOpen() const { return Handle.IsValid(); }
+		int64 Written() const { return BytesWritten.load(); }
+		virtual bool Close() override { FScopeLock Lock(&Mutex); Handle.Reset(); return !IsError(); }
+		virtual void Serialize(void* Data, int64 Length) override
+		{
+			FScopeLock Lock(&Mutex);
+			if (!Handle.IsValid() || !Handle->Write(static_cast<const uint8*>(Data), Length) || !Handle->Flush())
+			{
+				SetError();
+				return;
+			}
+			BytesWritten += Length;
+		}
+		virtual int64 TotalSize() override { return BytesWritten.load(); }
+		virtual int64 Tell() override { return BytesWritten.load(); }
+		virtual FString GetArchiveName() const override { return TEXT("GFCFileSink"); }
+	private:
+		TUniquePtr<IFileHandle> Handle;
+		FCriticalSection Mutex;
+		std::atomic<int64> BytesWritten{0};
+	};
 
 	FString ExtensionOf(const FString& Url)
 	{
@@ -83,7 +121,9 @@ void UGFCCacheSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		Api->GetClient()->OnSessionChanged.AddUObject(this, &UGFCCacheSubsystem::HandleSessionChanged);
 	}
 	BackgroundHandle = FCoreDelegates::ApplicationWillEnterBackgroundDelegate.AddUObject(this, &UGFCCacheSubsystem::HandleBackground);
-	MemoryTrimHandle = FCoreDelegates::GetMemoryTrimDelegate().AddUObject(this, &UGFCCacheSubsystem::HandleBackground);
+	// The engine asks for a memory trim routinely (about once a minute): that only drops what's off screen.
+	// Leaving the app or a real low-memory warning releases everything, including what's playing.
+	MemoryTrimHandle = FCoreDelegates::GetMemoryTrimDelegate().AddUObject(this, &UGFCCacheSubsystem::HandleMemoryTrim);
 	LowMemoryHandle = FCoreDelegates::ApplicationShouldUnloadResourcesDelegate.AddUObject(this, &UGFCCacheSubsystem::HandleBackground);
 
 	TWeakObjectPtr<UGFCCacheSubsystem> WeakThis(this);
@@ -269,7 +309,8 @@ void UGFCCacheSubsystem::SetVisibleThumbnails(const TSet<FString>& Urls)
 	Store->SetVisible(Urls);
 }
 
-void UGFCCacheSubsystem::FetchFile(const FString& Url, const FString& Owner, int64 MaxBytes, bool bHeavy, FOnFile Done)
+void UGFCCacheSubsystem::FetchFile(const FString& Url, const FString& Owner, int64 MaxBytes, bool bHeavy, FOnFile Done,
+	FOnFileProgress Progress)
 {
 	const int64 Cap = FMath::Min(MaxBytes, Store->GetLimits().MaxDiskBytes);
 	switch (Store->CanAdmit(Cap))
@@ -293,10 +334,21 @@ void UGFCCacheSubsystem::FetchFile(const FString& Url, const FString& Owner, int
 	Request->SetVerb(TEXT("GET"));
 	Request->SetTimeout(GetDefault<UGFCApiSettings>()->ModelLoadTimeoutSeconds);
 
-	// Abort as soon as the body grows past the cap, instead of downloading it all.
+	// The body goes straight to its file as it arrives: nothing big is ever held in memory.
+	const FString Ext = ExtensionOf(Url);
+	const FString Path = Store->MakeFilePath(Owner, Ext);
+	TSharedRef<FGFCFileSink> Sink = MakeShared<FGFCFileSink>(Path);
+	if (!Sink->IsOpen())
+	{
+		Done(EGFCFetchResult::CacheFull, FString(), 0);
+		return;
+	}
+	Request->SetResponseBodyReceiveStream(Sink);
+
+	// Abort as soon as the body grows past the cap, instead of downloading it all; report progress.
 	TWeakPtr<IHttpRequest, ESPMode::ThreadSafe> WeakRequest = Request;
 	TSharedRef<bool> bTooBig = MakeShared<bool>(false);
-	Request->OnRequestProgress64().BindLambda([Cap, bTooBig, WeakRequest](FHttpRequestPtr, uint64, uint64 Received)
+	Request->OnRequestProgress64().BindLambda([Cap, bTooBig, WeakRequest, Sink, Path, Progress](FHttpRequestPtr, uint64, uint64 Received)
 	{
 		if (int64(Received) > Cap && !*bTooBig)
 		{
@@ -305,53 +357,58 @@ void UGFCCacheSubsystem::FetchFile(const FString& Url, const FString& Owner, int
 			{
 				R->CancelRequest();
 			}
+			return;
+		}
+		if (Progress && !*bTooBig)
+		{
+			Progress(Path, Sink->Written());
 		}
 	});
 
 	TWeakObjectPtr<UGFCCacheSubsystem> WeakThis(this);
-	const FString Ext = ExtensionOf(Url);
 	Request->OnProcessRequestComplete().BindLambda(
-		[WeakThis, Owner, Cap, Ext, bTooBig, Done = MoveTemp(Done)](FHttpRequestPtr Req, FHttpResponsePtr Resp, bool bConnected)
+		[WeakThis, Owner, Cap, Path, Sink, bTooBig, Done = MoveTemp(Done)](FHttpRequestPtr Req, FHttpResponsePtr Resp, bool bConnected)
 		{
+			Sink->Close();
+			const int64 Bytes = Sink->Written();
+			auto Fail = [&](EGFCFetchResult Result)
+			{
+				IFileManager::Get().Delete(*Path, false, true, true); // no half-written files left behind
+				Done(Result, FString(), 0);
+			};
 			if (!WeakThis.IsValid())
 			{
+				IFileManager::Get().Delete(*Path, false, true, true);
 				return;
 			}
 			WeakThis->InFlight.RemoveSingle(Owner, Req.ToSharedRef());
-			if (*bTooBig)
+			if (*bTooBig || Bytes > Cap)
 			{
-				Done(EGFCFetchResult::TooBig, FString(), 0);
+				Fail(EGFCFetchResult::TooBig);
 				return;
 			}
 			if (Req->GetStatus() == EHttpRequestStatus::Failed && !bConnected && !Resp.IsValid())
 			{
-				Done(Req->GetFailureReason() == EHttpFailureReason::Cancelled ? EGFCFetchResult::Cancelled : EGFCFetchResult::NetworkError, FString(), 0);
+				Fail(Req->GetFailureReason() == EHttpFailureReason::Cancelled ? EGFCFetchResult::Cancelled : EGFCFetchResult::NetworkError);
 				return;
 			}
-			if (!bConnected || !Resp.IsValid() || Resp->GetResponseCode() != 200)
+			if (!bConnected || !Resp.IsValid() || Resp->GetResponseCode() != 200 || Sink->IsError())
 			{
-				Done(EGFCFetchResult::NetworkError, FString(), 0);
-				return;
-			}
-			const TArray<uint8>& Body = Resp->GetContent();
-			if (Body.Num() > Cap)
-			{
-				Done(EGFCFetchResult::TooBig, FString(), 0);
+				Fail(EGFCFetchResult::NetworkError);
 				return;
 			}
 			FGFCCacheStore& S = *WeakThis->Store;
-			if (S.CanAdmit(Body.Num()) == FGFCCacheStore::EAdmit::LowDiskSpace)
+			if (S.CanAdmit(Bytes) == FGFCCacheStore::EAdmit::LowDiskSpace)
 			{
-				Done(EGFCFetchResult::LowDiskSpace, FString(), 0);
+				Fail(EGFCFetchResult::LowDiskSpace);
 				return;
 			}
-			const FString Path = S.MakeFilePath(Owner, Ext);
-			if (!FFileHelper::SaveArrayToFile(Body, *Path) || !S.AddFile(Owner, Path, Body.Num()))
+			if (!S.AddFile(Owner, Path, Bytes))
 			{
-				Done(EGFCFetchResult::CacheFull, FString(), 0);
+				Fail(EGFCFetchResult::CacheFull);
 				return;
 			}
-			Done(EGFCFetchResult::Ok, Path, Body.Num());
+			Done(EGFCFetchResult::Ok, Path, Bytes);
 		});
 	InFlight.Add(Owner, Request);
 	Request->ProcessRequest();
@@ -434,6 +491,14 @@ void UGFCCacheSubsystem::WipeAll()
 	Thumbnails.Reset();
 	PendingThumbnails.Reset();
 	FailedThumbnails.Reset();
+}
+
+void UGFCCacheSubsystem::HandleMemoryTrim()
+{
+	if (!Store) return;
+	DropTextures(Store->TrimToVisible());
+	FailedThumbnails.Reset();
+	UE_LOG(LogGFCApi, Verbose, TEXT("Memory trim (kept what's live): %s"), *GetStats().ToString());
 }
 
 void UGFCCacheSubsystem::HandleBackground()

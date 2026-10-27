@@ -8,15 +8,21 @@
 #include "GFCMusicPlayer.generated.h"
 
 class UGFCMediaSession;
+class UGFCWavStreamer;
 
 DECLARE_MULTICAST_DELEGATE(FGFCOnMusicChanged);
 
-enum class EGFCMusicState : uint8 { Idle, Loading, Playing, Paused, Failed };
+enum class EGFCMusicState : uint8 { Idle, ConfirmCellular, Loading, Playing, Paused, Failed };
 
 /**
  * The app's music player: one audio post at a time, playing across screens (the mini player above
- * the bottom bar and the full player on the post screen both drive it). Any audio file the phone's
- * media player can decode plays: MP3, AAC/M4A, WAV, OGG, Opus, FLAC (WMA only where the OS has it).
+ * the bottom bar and the full player on the post screen both drive it).
+ *
+ * Two engines: WAV plays in the engine itself (UGFCWavStreamer), from the file while it downloads,
+ * because Android's platform player in Unreal doesn't do WAV; everything else (MP3, AAC/M4A, OGG,
+ * Opus, FLAC) goes to the platform media player, falling back to the WAV engine for a file that is
+ * really WAV. A big track on mobile data asks first. When the node offers a compressed streaming copy
+ * (FGFCSeed::Stream), that's played instead of the original.
  *
  * The file is the cache's one live heavy item (owner "music"): opening a video or a 3D model stops
  * the music, and logging out stops it too. Qualified plays are reported to the node like inline
@@ -53,6 +59,9 @@ public:
 	/** Fired when the track, state or loop setting changes (not every tick: poll the position). */
 	FGFCOnMusicChanged OnChanged;
 
+	/** The message for Failed, or the mobile-data question for ConfirmCellular. */
+	const FString& GetMessage() const { return Error; }
+
 	/** "m:ss" (or "h:mm:ss") for the player's time labels. */
 	static FString FormatTime(float Seconds);
 
@@ -62,8 +71,14 @@ private:
 	bool Tick(float DeltaSeconds);
 	void SetState(EGFCMusicState NewState, const FString& InError = FString());
 	void OnOwnerReleased(const FString& Owner);
+	void OpenWithPlatformPlayer(const FString& Path);
+	void BeginListen();
+	void Fail(const FString& Message);
 
 	UPROPERTY(Transient) TObjectPtr<UGFCMediaSession> Session;
+	UPROPERTY(Transient) TObjectPtr<UGFCWavStreamer> Wav;
+	bool bWavBegun = false;
+	float LogTimer = 0.f;
 	FGFCSeed Seed;
 	EGFCMusicState State = EGFCMusicState::Idle;
 	FString Error;

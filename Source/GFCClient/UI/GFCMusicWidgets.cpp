@@ -29,6 +29,7 @@ namespace
 		case EGFCMusicState::Loading: return LOCTEXT("Loading", "Loading…");
 		case EGFCMusicState::Playing: return LOCTEXT("Pause", "Pause");
 		case EGFCMusicState::Failed: return LOCTEXT("Retry", "Try again");
+		case EGFCMusicState::ConfirmCellular: return LOCTEXT("PlayCell", "Play on data");
 		default: return LOCTEXT("Play", "Play");
 		}
 	}
@@ -138,9 +139,10 @@ void UGFCMusicPanel::Refresh()
 	if (StatusText)
 	{
 		const bool bFailed = bCurrent && M->GetState() == EGFCMusicState::Failed;
-		StatusText->SetText(bFailed ? FText::FromString(M->GetError()) : FText::GetEmpty());
-		StatusText->SetColorAndOpacity(FSlateColor(bFailed ? Danger : TextDim));
-		StatusText->SetVisibility(bFailed ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+		const bool bAsk = bCurrent && M->GetState() == EGFCMusicState::ConfirmCellular;
+		StatusText->SetText(bFailed || bAsk ? FText::FromString(M->GetMessage()) : FText::GetEmpty());
+		StatusText->SetColorAndOpacity(FSlateColor(bFailed ? Danger : Warning));
+		StatusText->SetVisibility(bFailed || bAsk ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 	}
 	if (!bCurrent)
 	{
@@ -293,7 +295,8 @@ void UGFCMiniPlayer::Refresh()
 	if (TitleText) TitleText->SetText(FText::FromString(M->GetSeed().Title));
 	if (OwnerText)
 	{
-		OwnerText->SetText(M->GetState() == EGFCMusicState::Failed ? FText::FromString(M->GetError())
+		const bool bNote = M->GetState() == EGFCMusicState::Failed || M->GetState() == EGFCMusicState::ConfirmCellular;
+		OwnerText->SetText(bNote ? FText::FromString(M->GetMessage())
 			: FText::Format(LOCTEXT("By", "@{0}"), FText::FromString(M->GetSeed().Owner)));
 		OwnerText->SetColorAndOpacity(FSlateColor(M->GetState() == EGFCMusicState::Failed ? Danger : TextDim));
 	}

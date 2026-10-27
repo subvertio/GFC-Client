@@ -143,6 +143,8 @@ struct GFCAPI_API FGFCSeed
 	UPROPERTY(BlueprintReadOnly, Category = "GFC") FString Description;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC") TArray<FString> Tags;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC") FString Full;
+	/** A smaller copy for streaming (e.g. AAC for a big WAV), when the node makes one ("stream"). Players prefer it. */
+	UPROPERTY(BlueprintReadOnly, Category = "GFC") FString Stream;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC") FString Thumb;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC") FString ContentType;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC") int64 FileSize = 0;
