@@ -14,10 +14,16 @@ FGFCViewRules FGFCViewRules::FromSettings()
 	return R;
 }
 
+TSet<FString>& FGFCViewTracker::Reported()
+{
+	static TSet<FString> Seeds;
+	return Seeds;
+}
+
 void FGFCViewTracker::Begin(const FString& InSeedId, EGFCMediaKind InKind, bool bOwnSeed)
 {
 	End();
-	if (InSeedId.IsEmpty() || bOwnSeed || Reported.Contains(InSeedId))
+	if (InSeedId.IsEmpty() || bOwnSeed || Reported().Contains(InSeedId))
 	{
 		return;
 	}
@@ -40,7 +46,7 @@ bool FGFCViewTracker::Qualify()
 	{
 		return false;
 	}
-	Reported.Add(SeedId);
+	Reported().Add(SeedId);
 	bActive = false;
 	return true;
 }

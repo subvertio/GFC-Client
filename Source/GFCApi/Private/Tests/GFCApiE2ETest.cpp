@@ -16,6 +16,14 @@
 #include "GFCApiClient.h"
 #include "GFCJson.h"
 #include "GFCSessionStore.h"
+#include "GFCUpload.h"
+#include "GFCMediaCapture.h"
+#include "HAL/FileManager.h"
+#include "IImageWrapper.h"
+#include "IImageWrapperModule.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
+#include "Modules/ModuleManager.h"
 #include "GFCApiSubsystem.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/CommandLine.h"
@@ -286,6 +294,47 @@ bool FGFCLocalNodeE2ETest::RunTest(const FString&)
 			TestFalse(TEXT("password not in backup"), Json.Contains(X->Password));
 			Next();
 		});
+	});
+	Run->Add(TEXT("upload a photo"), [this, C, X](auto Next)
+	{
+		// A 320x200 PNG made here, posted with progress like the Create screen does.
+		IImageWrapperModule& IW = FModuleManager::LoadModuleChecked<IImageWrapperModule>(TEXT("ImageWrapper"));
+		TSharedPtr<IImageWrapper> Png = IW.CreateImageWrapper(EImageFormat::PNG);
+		TArray<FColor> Px;
+		Px.SetNum(320 * 200);
+		for (int32 i = 0; i < Px.Num(); ++i) Px[i] = FColor(uint8(i % 320), uint8(i / 320), 160, 255);
+		Png->SetRaw(Px.GetData(), Px.Num() * 4, 320, 200, ERGBFormat::BGRA, 8);
+		const TArray64<uint8>& Bytes = Png->GetCompressed();
+		const FString Dir = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Automation/GFCE2E"));
+		IFileManager::Get().MakeDirectory(*Dir, true);
+		const FString File = Dir / TEXT("e2e_photo.png");
+		FFileHelper::SaveArrayToFile(TArrayView<const uint8>(Bytes.GetData(), int32(Bytes.Num())), *File);
+
+		FGFCUploadRequest Req;
+		Req.FilePath = File;
+		Req.FileName = TEXT("e2e_photo.png");
+		Req.MimeType = TEXT("image/png");
+		Req.Title = TEXT("E2E photo");
+		Req.Description = TEXT("Posted by the end-to-end test");
+		Req.ThumbnailJpeg = FGFCMediaCapture::MakeImageThumbnail(File, 256);
+		TestTrue(TEXT("thumbnail made on the device"), Req.ThumbnailJpeg.Num() > 100);
+		TSharedRef<int64> MaxSent = MakeShared<int64>(0);
+		C->Upload(Req, [MaxSent](int64 Sent, int64) { *MaxSent = FMath::Max(*MaxSent, Sent); },
+			[this, C, Next, MaxSent, File](const FGFCApiResult& R, const FGFCUploadResult& U)
+			{
+				TestTrue(FString::Printf(TEXT("upload ok (%s)"), *R.Error), R.bOk);
+				TestFalse(TEXT("posted seed has an id"), U.Seed.Id.IsEmpty());
+				TestEqual(TEXT("title kept"), U.Seed.Title, TEXT("E2E photo"));
+				TestTrue(TEXT("signed with the user's wallet (can earn)"), U.bRewardsEnabled);
+				TestTrue(TEXT("the node stored the device thumbnail"), !U.Seed.Thumb.IsEmpty());
+				TestTrue(TEXT("progress was reported"), *MaxSent > 0);
+				C->GetSeed(U.Seed.Id, [this, Next](const FGFCApiResult& G, const FGFCSeed& S)
+				{
+					TestTrue(TEXT("posted seed is readable"), G.bOk);
+					TestEqual(TEXT("as an image"), S.GetMediaKind(), EGFCMediaKind::Image);
+					Next();
+				});
+			});
 	});
 	Run->Add(TEXT("logout revokes the token"), [this, C, X](auto Next)
 	{

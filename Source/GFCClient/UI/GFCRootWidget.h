@@ -6,6 +6,7 @@
 #include "GFCRootWidget.generated.h"
 
 class UButton;
+class UGFCCreateScreen;
 class UGFCFeedScreen;
 class UGFCLoginScreen;
 class UGFCScreenBase;
@@ -33,12 +34,14 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GFC|Screens") TSubclassOf<UGFCFeedScreen> FeedScreenClass;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GFC|Screens") TSubclassOf<UGFCWalletScreen> WalletScreenClass;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GFC|Screens") TSubclassOf<UGFCSeedDetailScreen> SeedDetailScreenClass;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GFC|Screens") TSubclassOf<UGFCCreateScreen> CreateScreenClass;
 
 	UGFCRootWidget(const FObjectInitializer& ObjectInitializer);
 
 	UFUNCTION(BlueprintCallable, Category = "GFC|Navigation") void ShowLogin();
 	UFUNCTION(BlueprintCallable, Category = "GFC|Navigation") void ShowFeed();
 	UFUNCTION(BlueprintCallable, Category = "GFC|Navigation") void ShowWallet();
+	UFUNCTION(BlueprintCallable, Category = "GFC|Navigation") void ShowCreate();
 	UFUNCTION(BlueprintCallable, Category = "GFC|Navigation") void ShowSeed(const FGFCSeed& Seed);
 
 	/** Opens a seed by id (deep links). Works without logging in: seeds are public. */
@@ -62,6 +65,7 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UWidget> NavBar;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> FeedNavButton;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> WalletNavButton;
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> CreateNavButton;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> LogoutButton;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> LoginNavButton;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> UserText;
@@ -80,6 +84,7 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UGFCFeedScreen> FeedScreen;
 	UPROPERTY(Transient) TObjectPtr<UGFCWalletScreen> WalletScreen;
 	UPROPERTY(Transient) TObjectPtr<UGFCSeedDetailScreen> SeedDetailScreen;
+	UPROPERTY(Transient) TObjectPtr<UGFCCreateScreen> CreateScreen;
 	UPROPERTY(Transient) TObjectPtr<UGFCScreenBase> ActiveScreen;
 
 	FDelegateHandle DeepLinkHandle;

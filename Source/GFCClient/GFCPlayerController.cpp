@@ -1,6 +1,7 @@
 #include "GFCPlayerController.h"
 
 #include "Blueprint/UserWidget.h"
+#include "Debug/GFCDebugOverlay.h"
 #include "UI/GFCRootWidget.h"
 
 AGFCPlayerController::AGFCPlayerController()
@@ -25,4 +26,5 @@ void AGFCPlayerController::BeginPlay()
 		Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 		SetInputMode(Mode);
 	}
+	UGFCDebugOverlay::Install(this); // development builds only
 }

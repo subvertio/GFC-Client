@@ -32,6 +32,7 @@ bool UGFCMediaSession::Open(UWorld* World, const FString& FilePath)
 		Sound->SetMediaPlayer(Player);
 		Sound->bIsUISound = true;
 		Sound->RegisterComponent();
+		Sound->SetVolumeMultiplier(bMuted ? 0.f : 1.f);
 		Sound->Start();
 	}
 	return Player->OpenFile(FilePath);
@@ -65,6 +66,15 @@ void UGFCMediaSession::TogglePause()
 	else
 	{
 		Player->Play();
+	}
+}
+
+void UGFCMediaSession::SetMuted(bool bInMuted)
+{
+	bMuted = bInMuted;
+	if (Sound)
+	{
+		Sound->SetVolumeMultiplier(bMuted ? 0.f : 1.f);
 	}
 }
 

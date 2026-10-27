@@ -311,7 +311,8 @@ void UGFCSeedDetailScreen::SetState(EGFCDetailState NewState, const FText& Note)
 		bButtonEnabled = false;
 		break;
 	case EGFCDetailState::Ready:
-		Label = Kind == EGFCMediaKind::Video || Kind == EGFCMediaKind::Audio ? LOCTEXT("PlayPause", "Play / pause")
+		Label = Kind == EGFCMediaKind::Video ? (Media && Media->IsMuted() ? LOCTEXT("SoundOnD", "Sound on") : LOCTEXT("MuteD", "Mute"))
+			: Kind == EGFCMediaKind::Audio ? LOCTEXT("PlayPause", "Play / pause")
 			: Kind == EGFCMediaKind::Image ? LOCTEXT("FullShown", "Full image") : LOCTEXT("Reset", "Reset view");
 		bButtonEnabled = Kind != EGFCMediaKind::Image;
 		break;
@@ -343,7 +344,15 @@ void UGFCSeedDetailScreen::HandlePrimary()
 	{
 	case EGFCDetailState::Ready:
 		if (Viewer) Viewer->ResetView();
-		if (Media) Media->TogglePause();
+		if (Media && Seed.GetMediaKind() == EGFCMediaKind::Video)
+		{
+			Media->SetMuted(!Media->IsMuted()); // video: the button is the sound switch
+			SetState(State);
+		}
+		else if (Media)
+		{
+			Media->TogglePause();
+		}
 		return;
 	case EGFCDetailState::ConfirmCellular:
 		StartDownload();
@@ -467,6 +476,7 @@ void UGFCSeedDetailScreen::OnDownloaded(const FString& Path)
 
 	// Video or audio
 	Media = NewObject<UGFCMediaSession>(this);
+	Media->SetMuted(Kind == EGFCMediaKind::Video); // never start with sound; the user turns it on
 	if (!Media->Open(GetWorld(), Path))
 	{
 		Media->Release();

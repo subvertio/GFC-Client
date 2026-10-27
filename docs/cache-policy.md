@@ -23,6 +23,18 @@ private to the app and which the OS may clear when storage runs low. PC uses
 `Saved/GFCCache`. Never shared or external storage. As a guard, the store
 refuses to work on any folder not named `GFCCache`.
 
+### The outbox (posting)
+
+Media the user is posting is the one thing in the cache folder that isn't viewed content:
+
+- Camera captures go straight into the phone's **gallery** (MediaStore: Pictures/GFC, Movies/GFC). That copy is
+  the user's and the app never deletes it.
+- For the upload, Android hands the app a content URI, so the app copies the file into the cache folder
+  (`outbox-*`, plus `outbox-thumb-*` for a video's first frame). That copy isn't counted against the 200 MB cap
+  (a video can be bigger), is deleted after posting or cancelling, and is caught by the app-start orphan cleanup if
+  the app dies first. On PC the picked file is used in place and never deleted.
+- The upload streams the file from disk; it's never loaded into memory whole.
+
 ## Caps
 
 All in Project Settings > Game > GFC API (`Config/DefaultGame.ini`).

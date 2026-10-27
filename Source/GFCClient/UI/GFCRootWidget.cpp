@@ -15,6 +15,7 @@
 #include "GFCDeepLink.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
+#include "UI/GFCCreateScreen.h"
 #include "UI/GFCFeedScreen.h"
 #include "UI/GFCLoginScreen.h"
 #include "UI/GFCSeedDetailScreen.h"
@@ -32,6 +33,7 @@ UGFCRootWidget::UGFCRootWidget(const FObjectInitializer& ObjectInitializer)
 	FeedScreenClass = UGFCFeedScreen::StaticClass();
 	WalletScreenClass = UGFCWalletScreen::StaticClass();
 	SeedDetailScreenClass = UGFCSeedDetailScreen::StaticClass();
+	CreateScreenClass = UGFCCreateScreen::StaticClass();
 }
 
 void UGFCRootWidget::NativeOnInitialized()
@@ -57,9 +59,11 @@ void UGFCRootWidget::NativeOnInitialized()
 	FeedScreen = AddScreen(CreateWidget<UGFCFeedScreen>(this, FeedScreenClass));
 	WalletScreen = AddScreen(CreateWidget<UGFCWalletScreen>(this, WalletScreenClass));
 	SeedDetailScreen = AddScreen(CreateWidget<UGFCSeedDetailScreen>(this, SeedDetailScreenClass));
+	CreateScreen = AddScreen(CreateWidget<UGFCCreateScreen>(this, CreateScreenClass));
 
 	if (FeedNavButton) FeedNavButton->OnClicked.AddDynamic(this, &ThisClass::ShowFeed);
 	if (WalletNavButton) WalletNavButton->OnClicked.AddDynamic(this, &ThisClass::ShowWallet);
+	if (CreateNavButton) CreateNavButton->OnClicked.AddDynamic(this, &ThisClass::ShowCreate);
 	if (LogoutButton) LogoutButton->OnClicked.AddDynamic(this, &ThisClass::HandleLogout);
 	if (LoginNavButton) LoginNavButton->OnClicked.AddDynamic(this, &ThisClass::ShowLogin);
 
@@ -133,8 +137,10 @@ void UGFCRootWidget::BuildDefaultLayout()
 	UHorizontalBox* Nav = MakeRow(T);
 	NavBg->AddChild(Nav);
 	FeedNavButton = MakeButton(T, LOCTEXT("Feed", "Feed"), PanelRaised);
+	CreateNavButton = MakeButton(T, LOCTEXT("Create", "+ Post"));
 	WalletNavButton = MakeButton(T, LOCTEXT("Wallet", "Wallet"), PanelRaised);
 	AddH(Nav, FeedNavButton, 8.f, true);
+	AddH(Nav, CreateNavButton, 8.f, true);
 	AddH(Nav, WalletNavButton, 0.f, true);
 	NavBar = NavBg;
 	AddV(Col, NavBg, 0.f);
@@ -151,6 +157,17 @@ bool UGFCRootWidget::OpenStartScreenFromCommandLine()
 	if (Screen.Equals(TEXT("wallet"), ESearchCase::IgnoreCase))
 	{
 		ShowWallet();
+		return true;
+	}
+	if (Screen.Equals(TEXT("create"), ESearchCase::IgnoreCase))
+	{
+		ShowCreate();
+		// -GFCPost=<file>: preselect a file to post (testing on PC without the file dialog).
+		FString PostFile;
+		if (FParse::Value(FCommandLine::Get(), TEXT("GFCPost="), PostFile))
+		{
+			CreateScreen->UseFile(PostFile);
+		}
 		return true;
 	}
 	FString SeedId;
@@ -201,6 +218,7 @@ void UGFCRootWidget::ShowLogin()
 
 void UGFCRootWidget::ShowFeed() { Activate(FeedScreen); }
 void UGFCRootWidget::ShowWallet() { Activate(WalletScreen); }
+void UGFCRootWidget::ShowCreate() { Activate(CreateScreen); }
 
 void UGFCRootWidget::ShowSeed(const FGFCSeed& Seed)
 {

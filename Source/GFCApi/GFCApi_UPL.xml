@@ -8,6 +8,11 @@
   - Custom scheme fallback: gfc://seed/{id} (the target of the share page's intent:// link).
   - Hands links to C++ (FGFCDeepLink) on cold start and in onNewIntent.
   - Exposes the app's private cache folder (Context.getCacheDir) to the cache subsystem.
+  - Posting media (FGFCMediaCapture): the system camera (photo/video) writing straight into
+    the user's gallery via MediaStore, and the system photo picker. The chosen media is
+    copied into the app's cache folder for the upload, and deleted after posting.
+    No CAMERA permission is declared (the camera app holds it). WRITE_EXTERNAL_STORAGE is
+    declared only up to Android 9 and requested only when the user taps Photo or Video.
 
   Not yet built on a device: Android tooling isn't installed on the dev machine yet.
 -->
@@ -17,6 +22,7 @@
 	</init>
 
 	<androidManifestUpdates>
+		<addPermission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>
 		<addElements tag="activity" name="com.epicgames.unreal.GameActivity">
 			<intent-filter android:autoVerify="true">
 				<action android:name="android.intent.action.VIEW"/>
@@ -46,7 +52,7 @@
 	</androidManifestUpdates>
 
 	<gameActivityClassAdditions>
-		<insert>
+		<insert><![CDATA[
 	// ---- GFC deep links ----
 	private static String gfcPendingLink = null;
 	public native void nativeGFCOnDeepLink(String url);
@@ -74,25 +80,200 @@
 		return url;
 	}
 
+	// ---- GFC posting: camera, video, photo picker ----
+	private static final int GFC_REQ_PHOTO = 0x6FC1;
+	private static final int GFC_REQ_VIDEO = 0x6FC2;
+	private static final int GFC_REQ_PICK = 0x6FC3;
+	private static final int GFC_REQ_PERM = 0x6FC4;
+	private android.net.Uri gfcCaptureUri = null;
+	private int gfcPendingSource = -1;
+	public native void nativeGFCOnCaptured(String path, String mime, String name, long size, String thumb, boolean savedToGallery, String error);
+
+	/** 0 = photo, 1 = video, 2 = gallery. Called from C++. */
+	public void AndroidThunkJava_GFCCapture(final int source)
+	{
+		runOnUiThread(new Runnable() { public void run() { gfcStartCapture(source); } });
+	}
+
+	private void gfcFail(String error)
+	{
+		try { nativeGFCOnCaptured("", "", "", 0, "", false, error); } catch (UnsatisfiedLinkError e) { }
+	}
+
+	private void gfcStartCapture(int source)
+	{
+		try
+		{
+			if (source == 2)
+			{
+				android.content.Intent pick;
+				if (android.os.Build.VERSION.SDK_INT >= 33)
+				{
+					pick = new android.content.Intent(android.provider.MediaStore.ACTION_PICK_IMAGES); // photos and videos, no permission
+				}
+				else
+				{
+					pick = new android.content.Intent(android.content.Intent.ACTION_GET_CONTENT);
+					pick.addCategory(android.content.Intent.CATEGORY_OPENABLE);
+					pick.setType("*/*");
+					pick.putExtra(android.content.Intent.EXTRA_MIME_TYPES, new String[] { "image/*", "video/*" });
+				}
+				startActivityForResult(pick, GFC_REQ_PICK);
+				return;
+			}
+			// Android 9 and older need this to write the capture into the shared gallery.
+			if (android.os.Build.VERSION.SDK_INT < 29 && checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+				!= android.content.pm.PackageManager.PERMISSION_GRANTED)
+			{
+				gfcPendingSource = source;
+				requestPermissions(new String[] { android.Manifest.permission.WRITE_EXTERNAL_STORAGE }, GFC_REQ_PERM);
+				return;
+			}
+			boolean video = source == 1;
+			android.content.ContentValues values = new android.content.ContentValues();
+			values.put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, "GFC_" + System.currentTimeMillis() + (video ? ".mp4" : ".jpg"));
+			values.put(android.provider.MediaStore.MediaColumns.MIME_TYPE, video ? "video/mp4" : "image/jpeg");
+			if (android.os.Build.VERSION.SDK_INT >= 29)
+			{
+				values.put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, (video ? "Movies" : "Pictures") + "/GFC");
+			}
+			android.net.Uri collection = video ? android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+				: android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
+			gfcCaptureUri = getContentResolver().insert(collection, values);
+			android.content.Intent capture = new android.content.Intent(video ? android.provider.MediaStore.ACTION_VIDEO_CAPTURE
+				: android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
+			capture.putExtra(android.provider.MediaStore.EXTRA_OUTPUT, gfcCaptureUri);
+			capture.addFlags(android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+			startActivityForResult(capture, video ? GFC_REQ_VIDEO : GFC_REQ_PHOTO);
+		}
+		catch (Exception e)
+		{
+			gfcFail("The camera or gallery couldn't be opened.");
+		}
+	}
+
+	private void gfcOnPermission(int[] grantResults)
+	{
+		if (grantResults != null && grantResults.length > 0 && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED)
+		{
+			gfcStartCapture(gfcPendingSource);
+		}
+		else
+		{
+			gfcFail("Storage permission is needed to save your capture to your gallery.");
+		}
+	}
+
+	private void gfcOnResult(final int requestCode, int resultCode, android.content.Intent data)
+	{
+		final boolean picked = requestCode == GFC_REQ_PICK;
+		final android.net.Uri uri = picked ? (data != null ? data.getData() : null) : gfcCaptureUri;
+		if (resultCode != RESULT_OK || uri == null)
+		{
+			if (!picked && gfcCaptureUri != null)
+			{
+				try { getContentResolver().delete(gfcCaptureUri, null, null); } catch (Exception e) { } // the empty gallery entry
+			}
+			gfcCaptureUri = null;
+			gfcFail("cancelled");
+			return;
+		}
+		gfcCaptureUri = null;
+		// Copy off the UI thread: videos can be large.
+		new Thread(new Runnable() { public void run() { gfcCopyAndFinish(uri, !picked); } }).start();
+	}
+
+	private void gfcCopyAndFinish(android.net.Uri uri, boolean savedToGallery)
+	{
+		try
+		{
+			android.content.ContentResolver resolver = getContentResolver();
+			String mime = resolver.getType(uri);
+			if (mime == null) mime = "application/octet-stream";
+			String name = "upload";
+			android.database.Cursor c = resolver.query(uri, new String[] { android.provider.OpenableColumns.DISPLAY_NAME }, null, null, null);
+			if (c != null) { if (c.moveToFirst() && c.getString(0) != null) name = c.getString(0); c.close(); }
+			String ext = mime.startsWith("video/") ? ".mp4" : (mime.equals("image/png") ? ".png" : (mime.startsWith("image/") ? ".jpg" : ".bin"));
+			if (name.lastIndexOf('.') < 0) name = name + ext;
+			java.io.File dir = new java.io.File(getCacheDir(), "GFCCache");
+			dir.mkdirs();
+			java.io.File out = new java.io.File(dir, "outbox-" + System.currentTimeMillis() + ext);
+			java.io.InputStream in = resolver.openInputStream(uri);
+			java.io.OutputStream os = new java.io.FileOutputStream(out);
+			byte[] buf = new byte[1 << 16];
+			long total = 0;
+			int n;
+			while ((n = in.read(buf)) > 0) { os.write(buf, 0, n); total += n; }
+			in.close();
+			os.close();
+
+			String thumb = "";
+			if (mime.startsWith("video/"))
+			{
+				android.media.MediaMetadataRetriever r = new android.media.MediaMetadataRetriever();
+				try
+				{
+					r.setDataSource(out.getAbsolutePath());
+					android.graphics.Bitmap frame = r.getFrameAtTime(500000);
+					if (frame != null)
+					{
+						float scale = 512.0f / Math.max(frame.getWidth(), frame.getHeight());
+						if (scale < 1.0f) frame = android.graphics.Bitmap.createScaledBitmap(frame, Math.round(frame.getWidth() * scale), Math.round(frame.getHeight() * scale), true);
+						java.io.File t = new java.io.File(dir, "outbox-thumb-" + System.currentTimeMillis() + ".jpg");
+						java.io.FileOutputStream ts = new java.io.FileOutputStream(t);
+						frame.compress(android.graphics.Bitmap.CompressFormat.JPEG, 82, ts);
+						ts.close();
+						thumb = t.getAbsolutePath();
+					}
+				}
+				catch (Exception e) { }
+				finally { try { r.release(); } catch (Exception e) { } }
+			}
+			nativeGFCOnCaptured(out.getAbsolutePath(), mime, name, total, thumb, savedToGallery, "");
+		}
+		catch (Exception e)
+		{
+			gfcFail("The media couldn't be read.");
+		}
+	}
+
 	/** The app's private cache folder; the OS may clear it when storage runs low. */
 	public String AndroidThunkJava_GFCGetCacheDir()
 	{
 		java.io.File dir = getCacheDir();
 		return dir != null ? dir.getAbsolutePath() : "";
 	}
-		</insert>
+		]]></insert>
 	</gameActivityClassAdditions>
 
 	<gameActivityOnCreateAdditions>
-		<insert>
+		<insert><![CDATA[
 		gfcHandleIntent(getIntent(), false);
-		</insert>
+		]]></insert>
 	</gameActivityOnCreateAdditions>
 
+	<gameActivityOnActivityResultAdditions>
+		<insert><![CDATA[
+		if (requestCode == GFC_REQ_PHOTO || requestCode == GFC_REQ_VIDEO || requestCode == GFC_REQ_PICK)
+		{
+			gfcOnResult(requestCode, resultCode, data);
+		}
+		]]></insert>
+	</gameActivityOnActivityResultAdditions>
+
+	<gameActivityOnRequestPermissionsResultAdditions>
+		<insert><![CDATA[
+		if (requestCode == GFC_REQ_PERM)
+		{
+			gfcOnPermission(grantResults);
+		}
+		]]></insert>
+	</gameActivityOnRequestPermissionsResultAdditions>
+
 	<gameActivityOnNewIntentAdditions>
-		<insert>
+		<insert><![CDATA[
 		setIntent(newIntent);
 		gfcHandleIntent(newIntent, true);
-		</insert>
+		]]></insert>
 	</gameActivityOnNewIntentAdditions>
 </root>

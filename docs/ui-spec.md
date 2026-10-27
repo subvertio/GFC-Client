@@ -17,6 +17,22 @@ Blueprint** later without C++ changes.
 - **Bandwidth:** thumbnails first; full media only on tap (and after asking, on mobile data above 10 MB).
 - **Preview while designing:** `.\Scripts\Run.ps1` (432x900, mobile renderer), with `-Screen wallet|feed|seed:<id>`.
 
+## Feed principles: the user is in control
+
+People hate apps that commandeer the whole feed. GFC doesn't:
+
+- **No autoplay takeover.** Nothing plays until it's tapped. Media never auto-plays full screen or with sound.
+- **Video plays inline, muted, inside its card.** Tapping a video plays it within the card it's in, muted, with a
+  "Sound on" button. Audio plays when its card is tapped, because the user asked for it.
+- **No full-screen swipe loops.** The feed is an ordinary scrolling list. There's always a clear way back
+  (Back, and the bottom bar), and no forced full-screen mode or trap.
+- **No one dominates the feed.** No more than two posts in a row from the same creator (`FGFCFeedMixer`,
+  tested in `GFC.Posting.FeedMixesCreators`). Otherwise the node's newest-first order is kept, and nothing is hidden.
+- **Scrolling away stops things.** A card that leaves the screen stops playing and lets go of its media
+  (see [cache-policy.md](cache-policy.md)).
+- Avoid infinite-scroll dark patterns: show the count, keep a visible end of the list, and don't auto-load
+  endlessly to keep people scrolling.
+
 ## How to replace a screen with a Blueprint
 
 1. In the editor: **Add > User Interface > Widget Blueprint**, and pick the screen's C++ class as the parent
@@ -131,6 +147,9 @@ views, likes and comments).
 | `KindText`, `MetaText` | TextBlock | no | "3D model"; "N views  N likes  N comments". |
 | `HandleText` | TextBlock | no | "@owner · 3h". |
 | `AvatarSlot` | SizeBox | no | Holds the avatar (a letter for now; profile images later). |
+| `RepostText` | TextBlock | no | "Repost of @original. Credit goes to the original." when the node says so. |
+| `MediaButton`, `MediaLabel` | Button, TextBlock | no | Over the media: "▶ Play video" / "▶ Play audio" (plays inline), "View in 3D" (opens the seed). |
+| `SoundButton`, `SoundLabel` | Button, TextBlock | no | Inline video only: "Sound on" / "Mute". |
 
 ## Seed detail (`GFCSeedDetailScreen`)
 
@@ -156,6 +175,31 @@ States: Thumbnail → (Confirm on mobile data) → Downloading → Preparing →
 Lifecycle: the seed is the one live heavy item. Leaving the screen, opening another seed, backgrounding or
 logging out releases the actor, mesh, textures, render target, media player and temp file. Qualified views
 are reported once (see docs/roadmap.md).
+
+## Create (`GFCCreateScreen`)
+
+Opened from **+ Post** in the bottom bar. It offers three choices, then a form with a progress bar.
+
+| Part | Type | Required | Notes |
+|---|---|---|---|
+| `PhotoButton` | Button | yes | System camera, photo. Phone only (disabled on PC). |
+| `VideoButton` | Button | yes | System camera, video. Phone only. |
+| `GalleryButton` | Button | yes | System photo picker (photos and videos); a file dialog on PC. |
+| `TitleBox` | EditableTextBox | yes | Prefilled with the file name. |
+| `PostButton` | Button | yes | Uploads to `/seeds/upload`. |
+| `DescriptionBox` | EditableTextBox | no | |
+| `FormPanel` | any widget | no | Hidden until something is chosen. |
+| `PreviewImage`, `FileText` | Image, TextBlock | no | Preview (image, or the video's first frame); name, size, "Saved to your gallery", or the 200 MB limit. |
+| `UploadProgress`, `ProgressText`, `CancelButton` | ProgressBar, TextBlock, Button | no | "Uploading 12.3 MB of 48.0 MB". Cancel stops it. |
+| `ResultText`, `ViewPostButton` | TextBlock, Button | no | "Posted!", or "This looks like a repost of @original. They'll get the credit." |
+
+Rules:
+- Captures are saved to the phone's gallery (Pictures/GFC, Movies/GFC) and stay the user's. The app's temporary
+  copy is deleted after posting or cancelling.
+- Ask for permissions only when they're needed: WRITE_EXTERNAL_STORAGE on Android 9 and older, when Photo or Video
+  is tapped. The camera and picker need no other permissions.
+- Over 200 MB (the gateway's request limit) is refused before uploading. Network errors and 5xx answers are retried
+  twice with backoff.
 
 ## Wallet (`GFCWalletScreen`)
 

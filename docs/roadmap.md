@@ -97,6 +97,33 @@ in Project Settings > GFC API > Views:
 - The package name is `tech.galacticfederation.gfc`, set once in `DefaultEngine.ini`. It's permanent once on Google Play.
 - Signing fingerprints and adb checks: see README > Android > App Links.
 
+## Milestone 1b: on the phone (debugging, posting, feed fairness)
+
+Built in this PR, and verified on PC as far as PC allows:
+
+- **Development builds by default** for the phone, with Verbose GFC logs, `stat fps`/`stat unit`, the debug
+  overlay (three-finger tap or `gfc.debug`: fps, API calls and errors, cache, live 3D memory), and crash and
+  ensure output in the log. The README has the USB debugging, `adb install -r` and `adb logcat` steps.
+- **Posting**: **+ Post** offers take a photo, record a video, or choose from the gallery. These use the system
+  camera intents writing into MediaStore and the system photo picker, through `GFCApi_UPL.xml`. The upload to
+  `/seeds/upload` is streamed, with progress, cancel, a 200 MB check, retries, title and description, and a
+  device-made thumbnail. `repost_of` in the response shows "This looks like a repost of @original. They'll get
+  the credit." Feed cards show reposts too.
+- **Feed fairness**: no autoplay; video plays inline, muted, on tap; at most two posts in a row per creator.
+  See the principles in `docs/ui-spec.md`.
+
+Still to verify or build on a real phone:
+
+- The camera, video and picker Java bridge hasn't been compiled or run (no Android toolchain yet). Check on
+  Android 9 (the storage permission path), Android 10 to 12 (`ACTION_GET_CONTENT`) and Android 13+ (the photo picker).
+- If Android kills the app while the camera is open, the capture is in the gallery but the post is lost.
+  Recover by re-picking it from the gallery for now; later, persist a tiny "pending capture" marker.
+- **Video compression before upload**: phone videos run 50 to 200 MB a minute. Add on-device transcoding
+  (Android `MediaCodec` / Media3 Transformer, e.g. 1080p at about 8 Mbit/s) before posting, and show the
+  estimated size.
+- Uploads in the background (a foreground service) so posting survives the screen turning off.
+- Icons: add an open-licensed set (Material Symbols, Apache 2.0, or Lucide, ISC); text labels for now.
+
 ## Android build (next)
 
 - Install Android support in the Epic launcher (UE 5.7 > Options > Android) and the SDK/NDK (README).

@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "UObject/Object.h"
 #include "GFCApiTypes.h"
+#include "GFCUpload.h"
 #include "GFCApiClient.generated.h"
 
 DECLARE_DYNAMIC_DELEGATE_OneParam(FGFCOnResult, const FGFCApiResult&, Result);
@@ -104,6 +105,22 @@ public:
 	 */
 	void RecordPlay(const FString& SeedId, TCallback<FGFCPlayResult> Done);
 
+	/**
+	 * Posts a seed (multipart, streamed from disk). Retries up to MaxUploadAttempts on
+	 * network errors and 5xx/429 with backoff; 4xx answers are final. Progress reports
+	 * bytes sent. The upload result says if the node recognised it as a repost.
+	 */
+	TSharedRef<FGFCUploadJob> Upload(const FGFCUploadRequest& Request, TFunction<void(int64 Sent, int64 Total)> Progress,
+		TCallback<FGFCUploadResult> Done);
+
+	/** The public gateway refuses request bodies over 200 MB. */
+	static constexpr int64 MaxUploadBytes = 200ll * 1024 * 1024;
+	static constexpr int32 MaxUploadAttempts = 3;
+
+	/** The last requests (for the debug overlay): verb, path without query, status, time. Never the token. */
+	const TArray<FGFCApiTrace>& GetRecentCalls() const { return RecentCalls; }
+	int32 GetInFlightCount() const;
+
 	/** Downloads public media (thumbnails). Never sends the token. Bodies over MaxBytes fail. */
 	void DownloadBytes(const FString& Url, int64 MaxBytes, TFunction<void(bool bOk, const TArray<uint8>& Bytes)> Done);
 
@@ -173,6 +190,14 @@ private:
 		EUnauthorized On401 = EUnauthorized::SessionExpired);
 
 	void HandleAuthResult(const FGFCApiResult& Result, const FGFCAuthResult& Auth);
+	void StartUploadAttempt(TSharedRef<FGFCUploadJob> Job, TSharedRef<FGFCMultipart> Body, TFunction<void(int64, int64)> Progress,
+		TCallback<FGFCUploadResult> Done);
+	int32 BeginTrace(const FString& Verb, const FString& Path);
+	void EndTrace(int32 TraceId, int32 Status);
+
+	TArray<FGFCApiTrace> RecentCalls;
+	TArray<int32> RecentCallIds;
+	int32 NextTraceId = 1;
 
 	FString BaseUrl;
 	FString Username;

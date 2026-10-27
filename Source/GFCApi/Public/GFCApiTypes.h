@@ -117,6 +117,19 @@ enum class EGFCMediaKind : uint8
 	Model3D,
 };
 
+/** "Repost of": a seed whose content matched an earlier original. Credit and earnings go to the original. */
+USTRUCT(BlueprintType)
+struct GFCAPI_API FGFCRepostInfo
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "GFC") FString SeedId;
+	UPROPERTY(BlueprintReadOnly, Category = "GFC") FString Owner;
+	UPROPERTY(BlueprintReadOnly, Category = "GFC") FString Url;
+
+	bool IsSet() const { return !SeedId.IsEmpty(); }
+};
+
 /** A seed from GET /feed or GET /seeds/{id}. Media paths (Full, Thumb) are relative to the node. */
 USTRUCT(BlueprintType)
 struct GFCAPI_API FGFCSeed
@@ -141,6 +154,8 @@ struct GFCAPI_API FGFCSeed
 	UPROPERTY(BlueprintReadOnly, Category = "GFC") FString RewardWallet;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC") bool bLiked = false;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC") bool bBookmarked = false;
+	/** Set when this seed is a repost of someone else's original. */
+	UPROPERTY(BlueprintReadOnly, Category = "GFC") FGFCRepostInfo RepostOf;
 
 	/** Classifies the media from its content type, falling back to the file extension. */
 	EGFCMediaKind GetMediaKind() const;
@@ -168,4 +183,27 @@ struct GFCAPI_API FGFCPlayResult
 	UPROPERTY(BlueprintReadOnly, Category = "GFC") double Amount = 0.0;
 	/** Why it didn't credit, e.g. "self-play" or "daily limit for this creator reached". */
 	UPROPERTY(BlueprintReadOnly, Category = "GFC") FString Reason;
+};
+
+/** POST /seeds/upload */
+USTRUCT(BlueprintType)
+struct GFCAPI_API FGFCUploadResult
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "GFC") FGFCSeed Seed;
+	/** True when the node signed the seed with a reward wallet, so it can earn. */
+	UPROPERTY(BlueprintReadOnly, Category = "GFC") bool bRewardsEnabled = false;
+	/** Set when the node matched the upload to an earlier original: the original's creator gets the credit. */
+	UPROPERTY(BlueprintReadOnly, Category = "GFC") FGFCRepostInfo RepostOf;
+};
+
+/** One request, for the debug overlay. Never holds the token, bodies or query strings. */
+struct GFCAPI_API FGFCApiTrace
+{
+	FString Verb;
+	FString Path;
+	int32 Status = -1; // -1 while in flight, 0 if the node couldn't be reached
+	double StartedAt = 0.0;
+	float Millis = 0.f;
 };

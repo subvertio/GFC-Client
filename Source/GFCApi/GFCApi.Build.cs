@@ -33,6 +33,8 @@ public class GFCApi : ModuleRules
 		{
 			// DPAPI (CryptProtectData) protects the stored session token on Windows.
 			PublicSystemLibraries.Add("Crypt32.lib");
+			// Windows "Open" dialog for choosing media to post (FGFCMediaCapture).
+			PublicSystemLibraries.Add("Comdlg32.lib");
 		}
 	}
 }

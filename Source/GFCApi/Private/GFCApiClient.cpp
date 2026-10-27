@@ -11,6 +11,7 @@
 #include "Interfaces/IHttpResponse.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
+#include "Containers/Ticker.h"
 
 namespace
 {
@@ -108,13 +109,18 @@ void UGFCApiClient::Send(const FString& Verb, const FString& PathAndQuery, const
 	}
 
 	const FString Logged = PathForLog(PathAndQuery);
+	const int32 TraceId = BeginTrace(Verb, Logged);
 	TWeakObjectPtr<UGFCApiClient> WeakThis(this);
 	Request->OnProcessRequestComplete().BindLambda(
-		[WeakThis, Verb, Logged, OnDone = MoveTemp(OnDone)](FHttpRequestPtr, FHttpResponsePtr Response, bool bConnected)
+		[WeakThis, Verb, Logged, TraceId, OnDone = MoveTemp(OnDone)](FHttpRequestPtr, FHttpResponsePtr Response, bool bConnected)
 		{
 			const int32 Status = (bConnected && Response.IsValid()) ? Response->GetResponseCode() : 0;
 			const FString RespBody = Response.IsValid() ? Response->GetContentAsString() : FString();
 			UE_LOG(LogGFCApi, Verbose, TEXT("%s %s -> %d"), *Verb, *Logged, Status);
+			if (WeakThis.IsValid())
+			{
+				WeakThis->EndTrace(TraceId, Status);
+			}
 			if (WeakThis.IsValid() && OnDone)
 			{
 				OnDone(Status, RespBody);
@@ -362,6 +368,155 @@ void UGFCApiClient::RecordPlay(const FString& SeedId, TCallback<FGFCPlayResult> 
 {
 	Call<FGFCPlayResult>(TEXT("POST"), TEXT("/seeds/") + FGFCUrl::Encode(SeedId) + TEXT("/played"), FormContentType, FString(), true,
 		&FGFCJson::ParsePlayResult, MoveTemp(Done));
+}
+
+int32 UGFCApiClient::BeginTrace(const FString& Verb, const FString& Path)
+{
+	FGFCApiTrace T;
+	T.Verb = Verb;
+	T.Path = Path;
+	T.StartedAt = FPlatformTime::Seconds();
+	RecentCalls.Add(T);
+	RecentCallIds.Add(NextTraceId);
+	while (RecentCalls.Num() > 30)
+	{
+		RecentCalls.RemoveAt(0);
+		RecentCallIds.RemoveAt(0);
+	}
+	return NextTraceId++;
+}
+
+void UGFCApiClient::EndTrace(int32 TraceId, int32 Status)
+{
+	const int32 Index = RecentCallIds.IndexOfByKey(TraceId);
+	if (RecentCalls.IsValidIndex(Index))
+	{
+		RecentCalls[Index].Status = Status;
+		RecentCalls[Index].Millis = float((FPlatformTime::Seconds() - RecentCalls[Index].StartedAt) * 1000.0);
+	}
+}
+
+int32 UGFCApiClient::GetInFlightCount() const
+{
+	int32 N = 0;
+	for (const FGFCApiTrace& T : RecentCalls)
+	{
+		N += T.Status < 0 ? 1 : 0;
+	}
+	return N;
+}
+
+TSharedRef<FGFCUploadJob> UGFCApiClient::Upload(const FGFCUploadRequest& Request, TFunction<void(int64, int64)> Progress,
+	TCallback<FGFCUploadResult> Done)
+{
+	TSharedRef<FGFCUploadJob> Job = MakeShared<FGFCUploadJob>();
+	TSharedRef<FGFCMultipart> Body = MakeShared<FGFCMultipart>();
+	if (Token.IsEmpty())
+	{
+		if (Done) Done(FGFCApiResult::Failure(401, TEXT("Please log in first.")), FGFCUploadResult());
+		return Job;
+	}
+	if (!FGFCMultipart::Build(Request, *Body))
+	{
+		if (Done) Done(FGFCApiResult::Failure(400, TEXT("The file couldn't be read.")), FGFCUploadResult());
+		return Job;
+	}
+	if (Body->TotalSize() > MaxUploadBytes)
+	{
+		if (Done) Done(FGFCApiResult::Failure(413, FString::Printf(TEXT("This file is %.0f MB; uploads are limited to %lld MB."),
+			Body->TotalSize() / 1048576.0, MaxUploadBytes / (1024 * 1024))), FGFCUploadResult());
+		return Job;
+	}
+	StartUploadAttempt(Job, Body, MoveTemp(Progress), MoveTemp(Done));
+	return Job;
+}
+
+void UGFCApiClient::StartUploadAttempt(TSharedRef<FGFCUploadJob> Job, TSharedRef<FGFCMultipart> Body,
+	TFunction<void(int64, int64)> Progress, TCallback<FGFCUploadResult> Done)
+{
+	++Job->Attempt;
+	const TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
+	Request->SetURL(FGFCUrl::Join(BaseUrl, TEXT("/seeds/upload")));
+	Request->SetVerb(TEXT("POST"));
+	Request->SetHeader(TEXT("Accept"), JsonContentType);
+	Request->SetHeader(TEXT("Authorization"), TEXT("Bearer ") + Token);
+	Request->SetHeader(TEXT("Content-Type"), Body->ContentType());
+	Request->SetContentFromStream(MakeShared<FGFCMultipartArchive, ESPMode::ThreadSafe>(*Body));
+	// Slow phones on slow networks: no overall timeout, but give up if nothing moves for a minute.
+	Request->SetActivityTimeout(60.f);
+	Job->Request = Request;
+
+	const int64 Total = Body->TotalSize();
+	if (Progress)
+	{
+		Request->OnRequestProgress64().BindLambda([Progress, Total](FHttpRequestPtr, uint64 Sent, uint64)
+		{
+			Progress(int64(Sent), Total);
+		});
+	}
+	const int32 TraceId = BeginTrace(TEXT("POST"), TEXT("/seeds/upload"));
+	TWeakObjectPtr<UGFCApiClient> WeakThis(this);
+	Request->OnProcessRequestComplete().BindLambda(
+		[WeakThis, Job, Body, Progress, Done, TraceId](FHttpRequestPtr, FHttpResponsePtr Response, bool bConnected)
+		{
+			if (!WeakThis.IsValid())
+			{
+				return;
+			}
+			const int32 Status = (bConnected && Response.IsValid()) ? Response->GetResponseCode() : 0;
+			const FString RespBody = Response.IsValid() ? Response->GetContentAsString() : FString();
+			WeakThis->EndTrace(TraceId, Status);
+			if (Job->bCancelled)
+			{
+				if (Done) Done(FGFCApiResult::Failure(0, TEXT("Upload cancelled.")), FGFCUploadResult());
+				return;
+			}
+			if (Status >= 200 && Status < 300)
+			{
+				FGFCUploadResult Result;
+				if (FGFCJson::ParseUploadResult(RespBody, Result))
+				{
+					if (Done) Done(FGFCApiResult::Success(Status), Result);
+				}
+				else if (Done)
+				{
+					Done(FGFCApiResult::Failure(Status, TEXT("Unexpected response from the node.")), FGFCUploadResult());
+				}
+				return;
+			}
+			// Flaky connection or a busy node: try again with backoff. 4xx answers are final.
+			const bool bRetryable = Status == 0 || Status == 429 || Status >= 500;
+			if (bRetryable && Job->Attempt < MaxUploadAttempts)
+			{
+				const float Delay = Job->Attempt == 1 ? 2.f : 6.f;
+				UE_LOG(LogGFCApi, Log, TEXT("Upload attempt %d failed (%d); retrying in %.0f s."), Job->Attempt, Status, Delay);
+				FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([WeakThis, Job, Body, Progress, Done](float)
+				{
+					if (WeakThis.IsValid() && !Job->bCancelled)
+					{
+						WeakThis->StartUploadAttempt(Job, Body, Progress, Done);
+					}
+					else if (Done)
+					{
+						Done(FGFCApiResult::Failure(0, TEXT("Upload cancelled.")), FGFCUploadResult());
+					}
+					return false;
+				}), Delay);
+				return;
+			}
+			FGFCApiResult R = FGFCApiResult::Failure(Status, FGFCJson::ErrorMessage(Status, RespBody));
+			if (Status == 413)
+			{
+				R.Error = TEXT("The file is too big for the node.");
+			}
+			if (Status == 401)
+			{
+				WeakThis->ClearSession();
+				WeakThis->OnUnauthorized.Broadcast();
+			}
+			if (Done) Done(R, FGFCUploadResult());
+		});
+	Request->ProcessRequest();
 }
 
 void UGFCApiClient::DownloadBytes(const FString& Url, int64 MaxBytes, TFunction<void(bool, const TArray<uint8>&)> Done)

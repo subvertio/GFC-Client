@@ -52,7 +52,9 @@ public:
 	/** Media playback position. Returns true if this qualifies the view. */
 	bool NotifyPlayback(float PositionSeconds, float DurationSeconds);
 
-	bool HasReported(const FString& Id) const { return Reported.Contains(Id); }
+	/** Reported seeds are shared by every tracker in the app session (feed and detail count once together). */
+	bool HasReported(const FString& Id) const { return Reported().Contains(Id); }
+	static void ResetSessionForTests() { Reported().Reset(); }
 	const FString& GetSeedId() const { return SeedId; }
 
 	FGFCViewRules Rules;
@@ -65,5 +67,5 @@ private:
 	bool bActive = false;
 	bool bLoadedOnce = false;
 	float VisibleSeconds = 0.f;
-	TSet<FString> Reported;
+	static TSet<FString>& Reported();
 };

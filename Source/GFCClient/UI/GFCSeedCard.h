@@ -3,15 +3,25 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "GFCApiTypes.h"
+#include "GFCViewTracker.h"
 #include "GFCSeedCard.generated.h"
 
 class UButton;
+class UGFCMediaSession;
 class UImage;
+class USizeBox;
 class UTextBlock;
 
 DECLARE_DELEGATE_OneParam(FGFCOnSeedSelected, const FGFCSeed&);
 
-/** One feed row: thumbnail, title, creator, stats. Click opens the seed. */
+/**
+ * One feed post: avatar, name, @handle · time, title, media, stats.
+ *
+ * Tapping the post opens the seed. Video and audio play **inline, inside the
+ * card, only when tapped**: video starts muted (a Sound button turns it on),
+ * audio plays because the user asked for it. Nothing auto-plays, nothing goes
+ * full screen. Scrolling away releases the player and the downloaded file.
+ */
 UCLASS()
 class GFCCLIENT_API UGFCSeedCard : public UUserWidget
 {
@@ -25,7 +35,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "GFC")
 	const FGFCSeed& GetSeed() const { return Seed; }
 
-	/** Scrolled out of view: let go of the thumbnail and anything the card owns in the cache. */
+	/** Scrolled out of view: let go of the thumbnail, the inline player and anything the card owns in the cache. */
 	void ReleaseContent();
 	/** Back in view: show the thumbnail again (from memory if still cached, else re-fetched). */
 	void RestoreContent();
@@ -37,6 +47,8 @@ public:
 
 protected:
 	virtual void NativeOnInitialized() override;
+	virtual void NativeDestruct() override;
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidget)) TObjectPtr<UButton> CardButton;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidget)) TObjectPtr<UImage> ThumbImage;
@@ -47,15 +59,34 @@ protected:
 	/** "@owner · 3h" */
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> HandleText;
 	/** Holds the avatar (an initial in a circle until profile images are loaded). */
-	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<class USizeBox> AvatarSlot;
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<USizeBox> AvatarSlot;
+	/** "Repost of @original": shown when the node matched this post to an earlier original. */
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> RepostText;
+	/** Over the media: plays video/audio inline (or opens the seed for other kinds). */
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> MediaButton;
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> MediaLabel;
+	/** Inline video: turns sound on/off. */
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> SoundButton;
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> SoundLabel;
 
 private:
 	void BuildDefaultLayout();
+	void StopInline();
+	void UpdateMediaControls();
+	void HandleOwnerReleased(const FString& Owner);
 
 	UFUNCTION() void HandleClicked();
+	UFUNCTION() void HandleMediaClicked();
+	UFUNCTION() void HandleSoundClicked();
 
 	FGFCSeed Seed;
 	bool bContentLoaded = false;
+	bool bLoadingInline = false;
+	float UiTimer = 0.f;
+	FGFCViewTracker Tracker;
+	FDelegateHandle ReleasedHandle;
+
+	UPROPERTY(Transient) TObjectPtr<UGFCMediaSession> Inline;
 };
 
 /** Short label for a media kind ("3D model", "Image", ...). */

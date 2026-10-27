@@ -31,6 +31,10 @@ public:
 	bool IsPlaying() const;
 	void TogglePause();
 
+	/** Video starts muted in the feed; the user turns sound on. */
+	void SetMuted(bool bInMuted);
+	bool IsMuted() const { return bMuted; }
+
 	void Release();
 
 private:
@@ -38,4 +42,5 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UMediaTexture> Texture;
 	UPROPERTY(Transient) TObjectPtr<UMediaSoundComponent> Sound;
 	UPROPERTY(Transient) TObjectPtr<AActor> SoundOwner;
+	bool bMuted = false;
 };

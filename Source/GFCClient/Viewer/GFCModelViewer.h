@@ -40,6 +40,10 @@ public:
 
 	UTextureRenderTarget2D* GetRenderTarget() const { return RenderTarget; }
 
+	/** For the debug overlay: triangles shown, and an estimate of mesh + texture + render target memory. */
+	int32 GetTriangleCount() const { return TriangleCount; }
+	int64 GetEstimatedBytes() const { return EstimatedBytes; }
+
 	/** Frees everything and destroys the actor. */
 	void Release();
 
@@ -67,4 +71,6 @@ private:
 	float Distance = 300.f;
 	bool bDirty = false;
 	int32 WarmupCaptures = 0;
+	int32 TriangleCount = 0;
+	int64 EstimatedBytes = 0;
 };

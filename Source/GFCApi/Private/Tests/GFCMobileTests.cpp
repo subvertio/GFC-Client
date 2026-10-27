@@ -134,6 +134,7 @@ bool FGFCDeepLinkTest::RunTest(const FString&)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGFCViewTrackerTest, "GFC.Mobile.QualifiedView", Flags)
 bool FGFCViewTrackerTest::RunTest(const FString&)
 {
+	FGFCViewTracker::ResetSessionForTests();
 	FGFCViewRules Rules; // 2 s image, 3 s model, 5 s media, 50% of clips under 10 s
 	auto Run = [](FGFCViewTracker& T, float Seconds, bool bVisible, bool bLoaded, float Step = 1.f / 60.f)
 	{

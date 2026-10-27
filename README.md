@@ -195,6 +195,51 @@ Steps:
 
 Before shipping on Android: Keystore-backed token storage and share-sheet backup export (see [docs/roadmap.md](docs/roadmap.md)).
 
+### Debug builds on your phone
+
+Phone builds default to **Development**, not Shipping (`Config/DefaultGame.ini`). Development builds have:
+
+- all GFC logging at Verbose (`[Core.Log] LogGFCApi=Verbose`);
+- the console (four-finger tap) with `stat fps`, `stat unit`, `gfc.cache`, `gfc.cache.overlay 1` and `gfc.debug`;
+- the **debug overlay**: fps, API calls (in flight, recent, errors), cache usage, the live 3D item's memory, and
+  process memory. Toggle it with a **three-finger tap**, `gfc.debug`, or by launching with `-GFCDebug`;
+- crash call stacks and `ensure` failures written to the log.
+
+**1. Turn on USB debugging (once).** On the phone: Settings > About phone, then tap **Build number** seven
+times to unlock Developer options. Then Settings > System > Developer options: turn on **USB debugging**.
+Connect the USB cable and accept the "Allow USB debugging?" prompt (tick "Always allow from this computer").
+
+**2. Check the phone is visible.** `adb` comes with the Android SDK (step 3 above):
+
+```powershell
+& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" devices
+```
+
+It should list your phone as `device`, not `unauthorized` (accept the prompt on the phone) or empty
+(try another cable or USB port).
+
+**3. Build and install.** Package Development (step 6 above), then install over any previous copy:
+
+```powershell
+& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" install -r "D:\projects\GFC-Client\Packaged\Android_ASTC\GFCClient-Android-Development-arm64.apk"
+```
+
+(The exact `.apk` name is printed at the end of packaging. If it was packaged with OBB data, use the
+`Install_GFCClient-Android-Development-arm64.bat` next to it instead.)
+
+**4. Capture logs to D:.** Start this before opening the app; stop it with Ctrl+C:
+
+```powershell
+New-Item -ItemType Directory -Force D:\GFCLogs | Out-Null; & "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" logcat -s UE GFC AndroidRuntime | Tee-Object -FilePath "D:\GFCLogs\gfc-$(Get-Date -Format yyyyMMdd-HHmmss).log"
+```
+
+`UE` is the engine's log tag (every `LogGFCApi` line is there), and `AndroidRuntime` catches Java crashes in the
+camera or picker bridge. Logs never contain tokens or passwords.
+
+**If packaging stops because the toolchain is missing** (it's not installed on this machine yet), work through
+steps 1 to 5 above first: Android in the Epic launcher, Android Studio, `SetupAndroid.bat` (NDK r27c
+`27.2.12479018`, platform `android-34`, build-tools `35.0.1`, CMake `3.22.1`), then Turnkey `VerifySdk`.
+
 ### App Links (shared links open the app)
 
 Links shared on X look like `https://node.galacticfederation.tech/p/{id}`. The app claims them with an

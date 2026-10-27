@@ -222,6 +222,7 @@ void FGFCJson::ReadSeed(const TSharedPtr<FJsonObject>& Obj, FGFCSeed& Out)
 	Out.RewardWallet = Str(Obj, TEXT("reward_wallet"));
 	Out.bLiked = Bool(Obj, TEXT("liked"));
 	Out.bBookmarked = Bool(Obj, TEXT("bookmarked"));
+	ReadRepost(Obj, Out.RepostOf);
 	if (Out.Title.IsEmpty())
 	{
 		Out.Title = FPaths::GetBaseFilename(Out.Full);
@@ -300,6 +301,35 @@ bool FGFCJson::ParseCurrentTokenId(const FString& Body, FString& OutId)
 		}
 	}
 	return false;
+}
+
+void FGFCJson::ReadRepost(const TSharedPtr<FJsonObject>& Obj, FGFCRepostInfo& Out)
+{
+	Out = FGFCRepostInfo();
+	const TSharedPtr<FJsonObject>* Repost = nullptr;
+	if (Obj.IsValid() && Obj->TryGetObjectField(TEXT("repost_of"), Repost) && Repost->IsValid())
+	{
+		Out.SeedId = Str(*Repost, TEXT("seed_id"));
+		Out.Owner = Str(*Repost, TEXT("owner"));
+		Out.Url = Str(*Repost, TEXT("url"));
+	}
+}
+
+bool FGFCJson::ParseUploadResult(const FString& Body, FGFCUploadResult& Out)
+{
+	const TSharedPtr<FJsonObject> Obj = ParseObject(Body);
+	if (!Obj.IsValid())
+	{
+		return false;
+	}
+	ReadSeed(Obj, Out.Seed);
+	if (Out.Seed.Description.IsEmpty())
+	{
+		Out.Seed.Description = Str(Obj, TEXT("desc")); // the upload response uses "desc"
+	}
+	Out.bRewardsEnabled = Bool(Obj, TEXT("rewards_enabled"));
+	Out.RepostOf = Out.Seed.RepostOf;
+	return !Out.Seed.Id.IsEmpty();
 }
 
 bool FGFCJson::ParsePlayResult(const FString& Body, FGFCPlayResult& Out)

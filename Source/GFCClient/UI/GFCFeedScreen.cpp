@@ -9,6 +9,7 @@
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "GFCApiClient.h"
+#include "GFCUpload.h"
 #include "GFCApiSettings.h"
 #include "GFCCacheSubsystem.h"
 #include "UI/GFCRootWidget.h"
@@ -162,7 +163,10 @@ void UGFCFeedScreen::Refresh()
 			WeakThis->ShowStatus(FText::FromString(R.Error), true);
 			return;
 		}
-		WeakThis->Populate(Seeds);
+		// No creator takes over the feed: at most two posts in a row from the same person.
+		TArray<FGFCSeed> Mixed = Seeds;
+		FGFCFeedMixer::MixCreators(Mixed, 2);
+		WeakThis->Populate(Mixed);
 	});
 }
 

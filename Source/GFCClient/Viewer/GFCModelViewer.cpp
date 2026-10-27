@@ -130,6 +130,18 @@ void AGFCModelViewer::ShowModel(const FGFCModelData& Model, int32 MaxTextureSize
 		Mesh->SetMaterial(i, Materials.IsValidIndex(S.Material) ? Materials[S.Material].Get() : DefaultMID);
 	}
 
+	// Rough memory estimate for the debug overlay: vertex buffers, indices, textures (+mips), render target.
+	TriangleCount = Model.Triangles;
+	EstimatedBytes = int64(RenderSize) * RenderSize * 4;
+	for (const FGFCModelSection& S : Model.Sections)
+	{
+		EstimatedBytes += int64(S.Positions.Num()) * (12 + 12 + 8 + 16) + int64(S.Indices.Num()) * 4;
+	}
+	for (const UTexture2D* Tex : Textures)
+	{
+		EstimatedBytes += Tex ? int64(Tex->GetSizeX()) * Tex->GetSizeY() * 4 * 4 / 3 : 0;
+	}
+
 	Center = FVector(Model.Bounds.GetCenter());
 	Radius = FMath::Max(1.f, float(Model.Bounds.GetExtent().Size()));
 	// The mesh's render proxy appears a frame or two later: keep capturing briefly.
