@@ -22,7 +22,8 @@ DerivedDataCache/
 compile_commands.json
 
 # Packaged builds and local outputs
-Build/Windows/
+Build/Windows/*
+!Build/Windows/Application.ico
 Build/Android/
 Packaged/
 *.apk
