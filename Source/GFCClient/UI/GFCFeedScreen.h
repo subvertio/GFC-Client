@@ -44,6 +44,11 @@ private:
 	UFUNCTION() void HandleRefresh();
 	void Populate(const TArray<FGFCSeed>& Seeds);
 
+public:
+	/** Drops posts the user just reported or whose creator they blocked, without reloading. */
+	void RemoveHidden();
+private:
+
 	/** Releases cards that have been off screen longer than the grace period; restores cards coming back. */
 	void UpdateCardVisibility(float DeltaTime);
 

@@ -45,6 +45,8 @@
 						<category android:name="android.intent.category.DEFAULT"/>
 						<category android:name="android.intent.category.BROWSABLE"/>
 						<data android:scheme="gfc" android:host="seed"/>
+						<!-- gfc://verified: "Back to GFC" after verifying a phone in the browser -->
+						<data android:scheme="gfc" android:host="verified"/>
 					</intent-filter>
 					</addElements>
 				</true>

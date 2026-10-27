@@ -31,6 +31,8 @@ public:
 	void SetSeed(const FGFCSeed& InSeed);
 
 	FGFCOnSeedSelected OnSelected;
+	/** "•••": report or block (GFCShowPostActions). */
+	FGFCOnSeedSelected OnMore;
 
 	UFUNCTION(BlueprintPure, Category = "GFC")
 	const FGFCSeed& GetSeed() const { return Seed; }
@@ -70,6 +72,7 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<USizeBox> AvatarSlot;
 	/** "Repost of @original": shown when the node matched this post to an earlier original. */
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> RepostText;
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> MoreButton;
 	/** Over the media: plays video/audio inline (or opens the seed for other kinds). */
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> MediaButton;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> MediaLabel;
@@ -86,6 +89,7 @@ private:
 	UFUNCTION() void HandleClicked();
 	UFUNCTION() void HandleMediaClicked();
 	UFUNCTION() void HandleSoundClicked();
+	UFUNCTION() void HandleMoreClicked();
 
 	FGFCSeed Seed;
 	bool bContentLoaded = false;

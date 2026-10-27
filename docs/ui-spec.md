@@ -163,6 +163,7 @@ views, likes and comments).
 | `HandleText` | TextBlock | no | "@owner · 3h". |
 | `AvatarSlot` | SizeBox | no | Holds the avatar (a letter for now; profile images later). |
 | `RepostText` | TextBlock | no | "Repost of @original. Credit goes to the original." when the node says so. |
+| `MoreButton` | Button | no | "•••" in the header: Report post (with a reason) or Block @owner, in an action sheet (`GFCActionSheet`). The post disappears at once; blocked accounts' posts stay out of the feed. |
 | `MediaButton`, `MediaLabel` | Button, TextBlock | no | Over the media: "▶ Play video" / "▶ Play audio" (plays inline), "View in 3D" (opens the seed). |
 | `SoundButton`, `SoundLabel` | Button, TextBlock | no | Inline video only: "Sound on" / "Mute". |
 
@@ -182,6 +183,7 @@ Thumbnail first. On tap, the full content plays in the app.
 | `ModelView` | GFCModelView | no | The 3D view; created in code if absent. Turns slowly on its own (a turntable) and plays the model's first animation on a loop; a touch stops the turn, which resumes 4 s after letting go. Drag: orbit. Pinch or Ctrl + wheel: zoom (the plain wheel scrolls the page). Two fingers or right drag: pan. Double click: reset. |
 | `PreviewNote` | TextBlock | no | Over the preview: progress, gesture hints, errors such as "over the triangle limit". Its parent hides when empty. |
 | `OpenMediaButton` | Button | no | Only for kinds the app can't show ("Open the original file"). |
+| `MoreButton` | Button | no | "•••" next to Back: report or block, as on the card. Leaves the post once it's hidden. |
 | `OwnerText`, `DescriptionText`, `MetaText`, `ShareLinkText` | TextBlock | no | A text post's text is `DescriptionText`, at 18 pt. |
 | `PreviewFrame` | any widget | no | The preview area; collapsed with `PrimaryButton` for text posts. |
 
@@ -248,6 +250,7 @@ yet, so the picker shows wallets this device created or was given ("Add by ID"),
 | `BalanceText` | TextBlock | yes | "12.34 GFC", from `balance_cents`. |
 | `WalletIdText`, `CopyIdButton`, `RefreshButton`, `NoWalletText` | | no | Copy ID copies the full ID. |
 | `CreateWalletButton` | Button | yes | |
+| `VerifyPanel`, `VerifyPhoneButton` | any widget, Button | no | "Verify your phone" card at the top, shown while the account isn't verified (`GET /verify/status`). Opens the node's verification page in the browser (`POST /verify/link`); back in the app (via `gfc://verified` or just returning), the status is checked and the earnings burst plays for the welcome grant and any first post bonus. |
 | `NewWalletNameBox`, `AddWalletIdBox`, `AddWalletButton` | | no | |
 | `BackupPanel` | any widget | yes | **The backup prompt. Keep it prominent.** Visible whenever the user has a wallet. |
 | `BackupPasswordBox`, `BackupPassphraseBox` | EditableTextBox | yes | Both password fields. Passphrase 12+ characters. |

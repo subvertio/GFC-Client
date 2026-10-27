@@ -3,11 +3,13 @@
 #include "CoreMinimal.h"
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FGFCOnSeedLink, const FString& /*SeedId*/);
+DECLARE_MULTICAST_DELEGATE(FGFCOnVerifiedLink);
 
 /**
  * Links that open a seed in the app:
  *   https://{app link host}/p/{id}   (Android App Link, what people share on X)
  *   gfc://seed/{id}                  (custom scheme fallback)
+ * and gfc://verified, the node's "Back to GFC" after phone verification in the browser.
  *
  * Where they come from:
  *   Android: the intent that launched the app or onNewIntent (GFCApi_UPL.xml).
@@ -40,4 +42,10 @@ struct GFCAPI_API FGFCDeepLink
 
 	/** Fired on the game thread when a link arrives while the app is running. */
 	static FGFCOnSeedLink OnSeedLink;
+
+	/** True for {scheme}://verified (any path or query): back from verifying a phone. */
+	static bool IsVerifiedLink(const FString& Url, const FString& Scheme);
+
+	/** Fired on the game thread when gfc://verified arrives while the app is running. */
+	static FGFCOnVerifiedLink OnVerifiedLink;
 };

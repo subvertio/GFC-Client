@@ -8,6 +8,7 @@
 #include "Misc/ScopeLock.h"
 
 FGFCOnSeedLink FGFCDeepLink::OnSeedLink;
+FGFCOnVerifiedLink FGFCDeepLink::OnVerifiedLink;
 
 #if PLATFORM_ANDROID
 namespace GFCAndroid { void ConsumeLaunchLink(); }
@@ -146,8 +147,27 @@ void FGFCDeepLink::CollectLaunchLink()
 #endif
 }
 
+bool FGFCDeepLink::IsVerifiedLink(const FString& Url, const FString& Scheme)
+{
+	FString UrlScheme, Rest;
+	if (Scheme.IsEmpty() || !Url.TrimStartAndEnd().Split(TEXT("://"), &UrlScheme, &Rest) || !UrlScheme.Equals(Scheme, ESearchCase::IgnoreCase))
+	{
+		return false;
+	}
+	Rest = StripQuery(Rest);
+	FString Host = Rest, Path;
+	Rest.Split(TEXT("/"), &Host, &Path);
+	return Host.Equals(TEXT("verified"), ESearchCase::IgnoreCase);
+}
+
 void FGFCDeepLink::Receive(const FString& Url)
 {
+	if (IsVerifiedLink(Url, GetDefault<UGFCApiSettings>()->AppLinkScheme))
+	{
+		// Arrives while the app runs (the browser hands back): the root refreshes the balance.
+		AsyncTask(ENamedThreads::GameThread, []() { OnVerifiedLink.Broadcast(); });
+		return;
+	}
 	FString SeedId;
 	if (!ParseSeedId(Url, SeedId))
 	{

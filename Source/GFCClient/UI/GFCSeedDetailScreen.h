@@ -87,6 +87,8 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> OpenMediaButton;
 	/** Thumbnail, then the full image or video. */
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UImage> PreviewImage;
+	/** "•••": report the post or block its creator. */
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> MoreButton;
 	/** The preview area and its button; collapsed for text posts, which are all text. */
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UWidget> PreviewFrame;
 	/** The 3D view; created in code if a Blueprint doesn't provide one. */
@@ -103,6 +105,7 @@ private:
 	UFUNCTION() void HandleBack();
 	UFUNCTION() void HandleOpenMedia();
 	UFUNCTION() void HandlePrimary();
+	UFUNCTION() void HandleMore();
 
 	void Render();
 	void SetState(EGFCDetailState NewState, const FText& Note = FText::GetEmpty());

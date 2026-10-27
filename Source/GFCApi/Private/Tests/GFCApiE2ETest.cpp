@@ -100,6 +100,7 @@ bool FGFCLocalNodeE2ETest::RunTest(const FString&)
 		FString Passphrase = FGuid::NewGuid().ToString(EGuidFormats::Digits);
 		FString OldToken;
 		FString WalletA, WalletB;
+		FString SeedId;
 	};
 	TSharedRef<FCtx> X = MakeShared<FCtx>();
 	TSharedRef<FGFCE2ERunner> Run = MakeShared<FGFCE2ERunner>();
@@ -320,8 +321,9 @@ bool FGFCLocalNodeE2ETest::RunTest(const FString&)
 		TestTrue(TEXT("thumbnail made on the device"), Req.ThumbnailJpeg.Num() > 100);
 		TSharedRef<int64> MaxSent = MakeShared<int64>(0);
 		C->Upload(Req, [MaxSent](int64 Sent, int64) { *MaxSent = FMath::Max(*MaxSent, Sent); },
-			[this, C, Next, MaxSent, File](const FGFCApiResult& R, const FGFCUploadResult& U)
+			[this, C, X, Next, MaxSent, File](const FGFCApiResult& R, const FGFCUploadResult& U)
 			{
+				X->SeedId = U.Seed.Id;
 				TestTrue(FString::Printf(TEXT("upload ok (%s)"), *R.Error), R.bOk);
 				TestFalse(TEXT("posted seed has an id"), U.Seed.Id.IsEmpty());
 				TestEqual(TEXT("title kept"), U.Seed.Title, TEXT("E2E photo"));
@@ -335,6 +337,68 @@ bool FGFCLocalNodeE2ETest::RunTest(const FString&)
 					Next();
 				});
 			});
+	});
+	Run->Add(TEXT("phone verification link"), [this, C, Node](auto Next)
+	{
+		C->GetVerifyStatus([this, C, Node, Next](const FGFCApiResult& R, const bool& bVerified)
+		{
+			TestTrue(FString::Printf(TEXT("verify status ok (%s)"), *R.Error), R.bOk);
+			TestFalse(TEXT("a new account isn't verified"), bVerified);
+			C->CreateVerifyLink([this, Node, Next](const FGFCApiResult& L, const FGFCVerifyLink& Link)
+			{
+				TestTrue(FString::Printf(TEXT("verify link ok (%s)"), *L.Error), L.bOk);
+				TestTrue(TEXT("link is the node's verify page"), Link.Url.Contains(TEXT("/verify?c=")));
+				Next();
+			});
+		});
+	});
+	Run->Add(TEXT("can't report your own post"), [this, C, X](auto Next)
+	{
+		C->ReportSeed(X->SeedId, TEXT("spam"), [this, Next](const FGFCApiResult& R)
+		{
+			TestEqual(TEXT("own post refused"), R.StatusCode, 400);
+			Next();
+		});
+	});
+	Run->Add(TEXT("another account reports and blocks"), [this, C, X, Node](auto Next)
+	{
+		UGFCApiClient* B = NewObject<UGFCApiClient>();
+		B->AddToRoot();
+		B->SetBaseUrl(Node);
+		B->TimeoutSeconds = 20.f;
+		const FString UserB = X->User + TEXT("b");
+		B->Register(UserB, X->Password, TEXT(""), [this, B, X, Next](const FGFCApiResult& R, const FGFCAuthResult&)
+		{
+			TestTrue(FString::Printf(TEXT("second account (%s)"), *R.Error), R.bOk);
+			B->ReportSeed(X->SeedId, TEXT("spam"), [this, B, X, Next](const FGFCApiResult& Rep)
+			{
+				TestTrue(FString::Printf(TEXT("report ok (%s)"), *Rep.Error), Rep.bOk);
+				FGFCSeed S;
+				S.Id = X->SeedId;
+				S.Owner = X->User;
+				TestTrue(TEXT("reported post hidden in the app at once"), B->IsHiddenForMe(S));
+				B->BlockUser(X->User, [this, B, X, Next](const FGFCApiResult& Blk)
+				{
+					TestTrue(FString::Printf(TEXT("block ok (%s)"), *Blk.Error), Blk.bOk);
+					B->GetFeed([this, B, X, Next](const FGFCApiResult& F, const TArray<FGFCSeed>& Items)
+					{
+						TestTrue(TEXT("feed ok"), F.bOk);
+						TestFalse(TEXT("the node drops the blocked account's posts"),
+							Items.ContainsByPredicate([X](const FGFCSeed& It) { return It.Owner.Equals(X->User, ESearchCase::IgnoreCase); }));
+						B->RefreshBlocks([this, B, X, Next](const FGFCApiResult& L)
+						{
+							TestTrue(TEXT("blocks listed"), L.bOk);
+							B->UnblockUser(X->User, [this, B, Next](const FGFCApiResult& U)
+							{
+								TestTrue(TEXT("unblock ok"), U.bOk);
+								B->RemoveFromRoot();
+								Next();
+							});
+						});
+					});
+				});
+			});
+		});
 	});
 	Run->Add(TEXT("logout revokes the token"), [this, C, X](auto Next)
 	{

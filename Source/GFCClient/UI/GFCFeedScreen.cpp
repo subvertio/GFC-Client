@@ -12,6 +12,7 @@
 #include "GFCUpload.h"
 #include "GFCApiSettings.h"
 #include "GFCCacheSubsystem.h"
+#include "UI/GFCActionSheet.h"
 #include "UI/GFCRootWidget.h"
 #include "UI/GFCSeedCard.h"
 #include "UI/GFCUIStyle.h"
@@ -165,9 +166,31 @@ void UGFCFeedScreen::Refresh()
 		}
 		// No creator takes over the feed: at most two posts in a row from the same person.
 		TArray<FGFCSeed> Mixed = Seeds;
+		if (const UGFCApiClient* Api = WeakThis->Client())
+		{
+			Mixed.RemoveAll([Api](const FGFCSeed& S) { return Api->IsHiddenForMe(S); });
+		}
 		FGFCFeedMixer::MixCreators(Mixed, 2);
 		WeakThis->Populate(Mixed);
 	});
+}
+
+void UGFCFeedScreen::RemoveHidden()
+{
+	const UGFCApiClient* Api = Client();
+	if (!SeedList || !Api)
+	{
+		return;
+	}
+	for (UWidget* W : SeedList->GetAllChildren())
+	{
+		UGFCSeedCard* Card = Cast<UGFCSeedCard>(W);
+		if (Card && Api->IsHiddenForMe(Card->GetSeed()))
+		{
+			Card->ReleaseContent();
+			Card->RemoveFromParent();
+		}
+	}
 }
 
 void UGFCFeedScreen::Populate(const TArray<FGFCSeed>& Seeds)
@@ -208,6 +231,15 @@ void UGFCFeedScreen::Populate(const TArray<FGFCSeed>& Seeds)
 		});
 		SeedList->AddChild(Card);
 		SeedList->AddChild(MakeDivider(WidgetTree));
+		Card->OnMore.BindLambda([WeakThis](const FGFCSeed& Selected)
+		{
+			if (!WeakThis.IsValid()) return;
+			const FString Id = Selected.Id;
+			GFCShowPostActions(WeakThis.Get(), Selected, [WeakThis, Id]()
+			{
+				if (WeakThis.IsValid() && WeakThis->Root.IsValid()) WeakThis->Root->OnPostHidden(Id);
+			});
+		});
 		Card->SetSeed(Seed);
 	}
 }

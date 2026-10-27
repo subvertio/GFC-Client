@@ -105,6 +105,24 @@ public:
 	 */
 	void RecordPlay(const FString& SeedId, TCallback<FGFCPlayResult> Done);
 
+	// ---- phone verification (rewards need it) ----
+
+	/** Whether the account's phone is verified. */
+	void GetVerifyStatus(TCallback<bool> Done);
+	/** A one-time page to verify the phone in the browser (Cloudflare Turnstile only runs in web pages). */
+	void CreateVerifyLink(TCallback<FGFCVerifyLink> Done);
+
+	// ---- report / block ----
+
+	/** Reason is one of the node's: spam, nudity, violence, harassment, hate, scam, copyright, other. */
+	void ReportSeed(const FString& SeedId, const FString& Reason, TFunction<void(const FGFCApiResult&)> Done);
+	void BlockUser(const FString& Username, TFunction<void(const FGFCApiResult&)> Done);
+	void UnblockUser(const FString& Username, TFunction<void(const FGFCApiResult&)> Done);
+	/** Loads the accounts this user blocked (the node filters its feed; this hides them at once in the app). */
+	void RefreshBlocks(TFunction<void(const FGFCApiResult&)> Done = nullptr);
+	/** Posts the app hides right away: reported by this user, or by an account they blocked. */
+	bool IsHiddenForMe(const FGFCSeed& Seed) const;
+
 	/**
 	 * Posts a seed (multipart, streamed from disk). Retries up to MaxUploadAttempts on
 	 * network errors and 5xx/429 with backoff; 4xx answers are final. Progress reports
@@ -202,4 +220,7 @@ private:
 	FString BaseUrl;
 	FString Username;
 	FString Token;
+	/** Lower-case usernames this user blocked, and seeds they reported (this session). */
+	TSet<FString> BlockedUsers;
+	TSet<FString> ReportedSeeds;
 };

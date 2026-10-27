@@ -31,6 +31,8 @@
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "Misc/FileHelper.h"
+#include "Components/Spacer.h"
+#include "UI/GFCActionSheet.h"
 #include "UI/GFCRootWidget.h"
 #include "UI/GFCSeedCard.h"
 #include "UI/GFCUIStyle.h"
@@ -98,6 +100,9 @@ void UGFCSeedDetailScreen::BuildDefaultLayout()
 	BackButton = MakeButton(T, LOCTEXT("Back", "← Back"), PanelRaised);
 	UHorizontalBox* BackRow = MakeRow(T);
 	AddH(BackRow, BackButton, 0.f);
+	AddH(BackRow, T->ConstructWidget<USpacer>(), 0.f, true);
+	MoreButton = MakeButton(T, FText::FromString(TEXT("\u2022\u2022\u2022")), PanelRaised);
+	AddH(BackRow, MoreButton, 0.f);
 	AddV(Col, BackRow, 10.f);
 
 	// Preview: thumbnail, then the model, image or video. Full width, square-ish.
@@ -161,6 +166,7 @@ void UGFCSeedDetailScreen::BindEvents()
 	if (BackButton) BackButton->OnClicked.AddDynamic(this, &ThisClass::HandleBack);
 	if (OpenMediaButton) OpenMediaButton->OnClicked.AddDynamic(this, &ThisClass::HandleOpenMedia);
 	if (PrimaryButton) PrimaryButton->OnClicked.AddDynamic(this, &ThisClass::HandlePrimary);
+	if (MoreButton) MoreButton->OnClicked.AddDynamic(this, &ThisClass::HandleMore);
 	if (ModelView)
 	{
 		TWeakObjectPtr<UGFCSeedDetailScreen> WeakThis(this);
@@ -343,6 +349,16 @@ void UGFCSeedDetailScreen::SetState(EGFCDetailState NewState, const FText& Note)
 	{
 		PreviewImage->GetParent()->SetVisibility(bModelLive ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
 	}
+}
+
+void UGFCSeedDetailScreen::HandleMore()
+{
+	TWeakObjectPtr<UGFCSeedDetailScreen> WeakThis(this);
+	const FString Id = Seed.Id;
+	GFCShowPostActions(this, Seed, [WeakThis, Id]()
+	{
+		if (WeakThis.IsValid() && WeakThis->Root.IsValid()) WeakThis->Root->OnPostHidden(Id);
+	});
 }
 
 void UGFCSeedDetailScreen::HandlePrimary()

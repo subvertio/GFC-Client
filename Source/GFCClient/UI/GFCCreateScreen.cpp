@@ -543,7 +543,8 @@ void UGFCCreateScreen::HandlePost()
 			}
 			else if (Result.bFirstPostBonusPending)
 			{
-				Message = FText::Format(LOCTEXT("BonusPending", "{0}\nCreate a wallet to collect your first-post bonus."), Message);
+				Message = FText::Format(LOCTEXT("BonusPending",
+					"{0}\nYour first post bonus is saved. Verify your phone and have a wallet (both in Wallet) to collect it."), Message);
 			}
 			else if (!Result.bRewardsEnabled)
 			{

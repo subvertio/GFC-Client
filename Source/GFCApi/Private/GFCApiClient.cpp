@@ -65,6 +65,8 @@ void UGFCApiClient::ClearSession()
 	const bool bHad = !Token.IsEmpty() || !Username.IsEmpty();
 	Username.Reset();
 	Token.Reset();
+	BlockedUsers.Reset();
+	ReportedSeeds.Reset();
 	if (bHad)
 	{
 		OnSessionChanged.Broadcast();
@@ -362,6 +364,71 @@ void UGFCApiClient::GetShareInfo(const FString& SeedId, TCallback<FGFCShareInfo>
 {
 	Call<FGFCShareInfo>(TEXT("GET"), TEXT("/p/") + FGFCUrl::Encode(SeedId) + TEXT("/share"), FString(), FString(), false,
 		&FGFCJson::ParseShareInfo, MoveTemp(Done));
+}
+
+void UGFCApiClient::GetVerifyStatus(TCallback<bool> Done)
+{
+	Call<bool>(TEXT("GET"), TEXT("/verify/status"), FString(), FString(), true, &FGFCJson::ParseVerifyStatus, MoveTemp(Done));
+}
+
+void UGFCApiClient::CreateVerifyLink(TCallback<FGFCVerifyLink> Done)
+{
+	Call<FGFCVerifyLink>(TEXT("POST"), TEXT("/verify/link"), FormContentType, FString(), true, &FGFCJson::ParseVerifyLink,
+		MoveTemp(Done));
+}
+
+void UGFCApiClient::ReportSeed(const FString& SeedId, const FString& Reason, TFunction<void(const FGFCApiResult&)> Done)
+{
+	TWeakObjectPtr<UGFCApiClient> WeakThis(this);
+	Call<bool>(TEXT("POST"), TEXT("/seeds/") + FGFCUrl::Encode(SeedId) + TEXT("/report"), FormContentType,
+		FGFCUrl::FormBody({{TEXT("reason"), Reason}}), true, nullptr,
+		[WeakThis, SeedId, Done](const FGFCApiResult& R, const bool&)
+		{
+			if (R.bOk && WeakThis.IsValid()) WeakThis->ReportedSeeds.Add(SeedId);
+			if (Done) Done(R);
+		});
+}
+
+void UGFCApiClient::BlockUser(const FString& Name, TFunction<void(const FGFCApiResult&)> Done)
+{
+	TWeakObjectPtr<UGFCApiClient> WeakThis(this);
+	Call<bool>(TEXT("POST"), TEXT("/users/") + FGFCUrl::Encode(Name) + TEXT("/block"), FormContentType, FString(), true, nullptr,
+		[WeakThis, Name, Done](const FGFCApiResult& R, const bool&)
+		{
+			if (R.bOk && WeakThis.IsValid()) WeakThis->BlockedUsers.Add(Name.ToLower());
+			if (Done) Done(R);
+		});
+}
+
+void UGFCApiClient::UnblockUser(const FString& Name, TFunction<void(const FGFCApiResult&)> Done)
+{
+	TWeakObjectPtr<UGFCApiClient> WeakThis(this);
+	Call<bool>(TEXT("DELETE"), TEXT("/users/") + FGFCUrl::Encode(Name) + TEXT("/block"), FString(), FString(), true, nullptr,
+		[WeakThis, Name, Done](const FGFCApiResult& R, const bool&)
+		{
+			if (R.bOk && WeakThis.IsValid()) WeakThis->BlockedUsers.Remove(Name.ToLower());
+			if (Done) Done(R);
+		});
+}
+
+void UGFCApiClient::RefreshBlocks(TFunction<void(const FGFCApiResult&)> Done)
+{
+	TWeakObjectPtr<UGFCApiClient> WeakThis(this);
+	Call<TArray<FString>>(TEXT("GET"), TEXT("/users/me/blocks"), FString(), FString(), true, &FGFCJson::ParseBlocks,
+		[WeakThis, Done](const FGFCApiResult& R, const TArray<FString>& Names)
+		{
+			if (R.bOk && WeakThis.IsValid())
+			{
+				WeakThis->BlockedUsers.Reset();
+				for (const FString& N : Names) WeakThis->BlockedUsers.Add(N.ToLower());
+			}
+			if (Done) Done(R);
+		});
+}
+
+bool UGFCApiClient::IsHiddenForMe(const FGFCSeed& Seed) const
+{
+	return ReportedSeeds.Contains(Seed.Id) || BlockedUsers.Contains(Seed.Owner.ToLower());
 }
 
 void UGFCApiClient::RecordPlay(const FString& SeedId, TCallback<FGFCPlayResult> Done)

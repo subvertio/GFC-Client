@@ -204,6 +204,14 @@ struct GFCAPI_API FGFCUploadResult
 	UPROPERTY(BlueprintReadOnly, Category = "GFC") bool bFirstPostBonusPending = false;
 };
 
+/** POST /verify/link: a one-time page to verify the account's phone in the browser. */
+struct GFCAPI_API FGFCVerifyLink
+{
+	/** Already verified: nothing to open. */
+	bool bVerified = false;
+	FString Url;
+};
+
 /** One request, for the debug overlay. Never holds the token, bodies or query strings. */
 struct GFCAPI_API FGFCApiTrace
 {

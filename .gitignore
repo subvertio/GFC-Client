@@ -36,3 +36,6 @@ Packaged/
 # Cook and packaging byproducts
 Build/Android_*/
 Packaged/
+
+# Written by PackageAndroid.ps1 -Release for one build (holds the key password), then deleted
+Config/Android/AndroidEngine.ini

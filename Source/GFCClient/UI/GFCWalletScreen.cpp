@@ -19,6 +19,7 @@
 #include "GFCJson.h"
 #include "HAL/PlatformApplicationMisc.h"
 #include "UI/GFCRewardBurst.h"
+#include "UI/GFCRootWidget.h"
 #include "UI/GFCUIStyle.h"
 
 #define LOCTEXT_NAMESPACE "GFCWallet"
@@ -53,6 +54,22 @@ void UGFCWalletScreen::BuildDefaultLayout()
 	UVerticalBox* Left = MakeColumn(T);
 	Scroll->AddChild(Left);
 
+	// 0. Verify the phone: rewards (welcome grant, first post bonus, plays) wait for it.
+	{
+		UBorder* Card = MakeCard(T, FMargin(18.f), &Accent);
+		UVerticalBox* Col = MakeColumn(T);
+		Card->AddChild(Col);
+		AddV(Col, MakeText(T, LOCTEXT("VerifyTitle", "Verify your phone"), 18, Text, true), 6.f);
+		AddV(Col, MakeText(T, LOCTEXT("VerifyWhy",
+			"Unlocks the 100 GFC welcome grant, your first post bonus, and rewards for the creators you watch. One account per "
+			"phone number. It opens a page in your browser; come back to GFC when it's done."), 12, TextDim), 12.f);
+		VerifyPhoneButton = MakeButton(T, LOCTEXT("VerifyButton", "Verify phone"));
+		AddV(Col, VerifyPhoneButton, 0.f);
+		VerifyPanel = Card;
+		VerifyPanel->SetVisibility(ESlateVisibility::Collapsed); // until the node says it's needed
+		AddV(Left, Card, 16.f);
+	}
+
 	// 1. Create a wallet (or add one you own): the first thing a new user does
 	{
 		UVerticalBox* Col = Section(T, Left, LOCTEXT("More", "1. Your wallets"));
@@ -65,7 +82,7 @@ void UGFCWalletScreen::BuildDefaultLayout()
 		AddV(Col, AddWalletIdBox, 8.f);
 		AddV(Col, AddWalletButton, 10.f);
 		AddV(Col, MakeText(T, LOCTEXT("PhoneNote",
-			"Your first wallet receives the 100 GFC welcome grant once your phone number is verified (coming to this app in milestone 3)."),
+			"Your first wallet receives the 100 GFC welcome grant once your phone number is verified."),
 			11, TextDim), 0.f);
 	}
 
@@ -141,6 +158,7 @@ void UGFCWalletScreen::BindEvents()
 {
 	if (WalletPicker) WalletPicker->OnSelectionChanged.AddDynamic(this, &ThisClass::HandlePickerChanged);
 	if (CreateWalletButton) CreateWalletButton->OnClicked.AddDynamic(this, &ThisClass::HandleCreateWallet);
+	if (VerifyPhoneButton) VerifyPhoneButton->OnClicked.AddDynamic(this, &ThisClass::HandleVerifyPhone);
 	if (AddWalletButton) AddWalletButton->OnClicked.AddDynamic(this, &ThisClass::HandleAddWallet);
 	if (CopyIdButton) CopyIdButton->OnClicked.AddDynamic(this, &ThisClass::HandleCopyId);
 	if (RefreshButton) RefreshButton->OnClicked.AddDynamic(this, &ThisClass::HandleRefresh);
@@ -148,9 +166,27 @@ void UGFCWalletScreen::BindEvents()
 	if (SendButton) SendButton->OnClicked.AddDynamic(this, &ThisClass::HandleSend);
 }
 
+void UGFCWalletScreen::SetPhoneVerified(bool bVerified)
+{
+	if (VerifyPanel) VerifyPanel->SetVisibility(bVerified ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+}
+
+void UGFCWalletScreen::HandleVerifyPhone()
+{
+	if (Root.IsValid()) Root->StartPhoneVerification();
+}
+
 void UGFCWalletScreen::OnScreenShown()
 {
 	RebuildPicker(SelectedWalletId);
+	if (UGFCApiClient* C = Client(); C && C->IsLoggedIn())
+	{
+		TWeakObjectPtr<UGFCWalletScreen> WeakThis(this);
+		C->GetVerifyStatus([WeakThis](const FGFCApiResult& R, const bool& bVerified)
+		{
+			if (WeakThis.IsValid() && R.bOk) WeakThis->SetPhoneVerified(bVerified);
+		});
+	}
 	if (BackupResultText) BackupResultText->SetText(FText::GetEmpty());
 	Super::OnScreenShown();
 }

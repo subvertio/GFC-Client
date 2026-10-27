@@ -59,6 +59,15 @@ public:
 	/** If the user's wallets went up since they last looked, plays the coin burst with the amount. */
 	void AnnounceEarnings();
 
+	/** The app's root (one per game instance). */
+	static UGFCRootWidget* Find(const UObject* WorldContext);
+
+	/** A post was reported or its creator blocked: off the feed, and off screen if it's open. */
+	void OnPostHidden(const FString& SeedId);
+
+	/** Opens the node's phone verification page in the browser; the balance is checked on return. */
+	void StartPhoneVerification();
+
 protected:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeDestruct() override;
@@ -91,6 +100,10 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UGFCScreenBase> ActiveScreen;
 
 	FDelegateHandle DeepLinkHandle;
+	FDelegateHandle VerifiedLinkHandle;
+	FDelegateHandle ForegroundHandle;
+	bool bVerifyingPhone = false;
+	void OnBackFromVerification();
 	TSharedPtr<class FGFCBackKey> BackKey;
 
 public:

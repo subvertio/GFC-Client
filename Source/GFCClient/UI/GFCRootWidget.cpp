@@ -23,7 +23,11 @@
 #include "UI/GFCLoginScreen.h"
 #include "UI/GFCSeedDetailScreen.h"
 #include "GFCApi.h"
+#include "UI/GFCActionSheet.h"
 #include "UI/GFCRewardBurst.h"
+#include "Misc/CoreDelegates.h"
+#include "HAL/PlatformProcess.h"
+#include "UObject/UObjectIterator.h"
 #include "UI/GFCUIStyle.h"
 #include "UI/GFCWalletScreen.h"
 
@@ -39,7 +43,10 @@ public:
 	{
 		if (Event.GetKey() == EKeys::Android_Back && Root.IsValid())
 		{
-			Root->HandleBack();
+			if (!UGFCActionSheet::CloseOpen()) // an open sheet closes first
+			{
+				Root->HandleBack();
+			}
 			return true; // always handled: unhandled, the engine dims the app
 		}
 		return false;
@@ -97,6 +104,12 @@ void UGFCRootWidget::NativeOnInitialized()
 	UGFCApiSubsystem* Api = GetGameInstance()->GetSubsystem<UGFCApiSubsystem>();
 	Api->OnSessionChanged.AddDynamic(this, &ThisClass::HandleSessionChanged);
 	DeepLinkHandle = FGFCDeepLink::OnSeedLink.AddUObject(this, &UGFCRootWidget::HandleDeepLink);
+	VerifiedLinkHandle = FGFCDeepLink::OnVerifiedLink.AddUObject(this, &UGFCRootWidget::OnBackFromVerification);
+	// Back from the browser without tapping "Back to GFC" counts too.
+	ForegroundHandle = FCoreDelegates::ApplicationHasEnteredForegroundDelegate.AddWeakLambda(this, [this]()
+	{
+		if (bVerifyingPhone) OnBackFromVerification();
+	});
 	if (FSlateApplication::IsInitialized())
 	{
 		BackKey = MakeShared<FGFCBackKey>();
@@ -122,6 +135,7 @@ void UGFCRootWidget::NativeOnInitialized()
 	if (Api->GetClient()->IsLoggedIn())
 	{
 		AnnounceEarnings(); // a remembered session is a login too
+		Api->GetClient()->RefreshBlocks();
 	}
 	ShowStatus(FText::Format(LOCTEXT("Connected", "Node: {0}"), FText::FromString(Api->GetClient()->GetBaseUrl())));
 }
@@ -129,6 +143,8 @@ void UGFCRootWidget::NativeOnInitialized()
 void UGFCRootWidget::NativeDestruct()
 {
 	FGFCDeepLink::OnSeedLink.Remove(DeepLinkHandle);
+	FGFCDeepLink::OnVerifiedLink.Remove(VerifiedLinkHandle);
+	FCoreDelegates::ApplicationHasEnteredForegroundDelegate.Remove(ForegroundHandle);
 	if (BackKey.IsValid() && FSlateApplication::IsInitialized())
 	{
 		FSlateApplication::Get().UnregisterInputPreProcessor(BackKey);
@@ -352,9 +368,80 @@ void UGFCRootWidget::AnnounceEarnings()
 	});
 }
 
+UGFCRootWidget* UGFCRootWidget::Find(const UObject* WorldContext)
+{
+	UWorld* World = WorldContext ? WorldContext->GetWorld() : nullptr;
+	for (TObjectIterator<UGFCRootWidget> It; It; ++It)
+	{
+		if (It->GetWorld() == World && It->IsInViewport())
+		{
+			return *It;
+		}
+	}
+	return nullptr;
+}
+
+void UGFCRootWidget::OnPostHidden(const FString& SeedId)
+{
+	if (FeedScreen) FeedScreen->RemoveHidden();
+	if (ActiveScreen == SeedDetailScreen && SeedDetailScreen && SeedDetailScreen->GetSeed().Id == SeedId)
+	{
+		ShowFeed();
+	}
+}
+
+void UGFCRootWidget::StartPhoneVerification()
+{
+	UGFCApiClient* C = GetGameInstance()->GetSubsystem<UGFCApiSubsystem>()->GetClient();
+	ShowStatus(LOCTEXT("OpeningVerify", "Opening phone verification…"));
+	TWeakObjectPtr<UGFCRootWidget> WeakThis(this);
+	C->CreateVerifyLink([WeakThis](const FGFCApiResult& R, const FGFCVerifyLink& Link)
+	{
+		if (!WeakThis.IsValid()) return;
+		if (!R.bOk)
+		{
+			WeakThis->ShowStatus(FText::FromString(R.Error), true);
+			return;
+		}
+		if (Link.bVerified)
+		{
+			WeakThis->ShowStatus(LOCTEXT("AlreadyVerified", "Your phone is already verified."));
+			WeakThis->OnBackFromVerification();
+			return;
+		}
+		WeakThis->bVerifyingPhone = true;
+		FString Error;
+		FPlatformProcess::LaunchURL(*Link.Url, nullptr, &Error);
+		if (!Error.IsEmpty())
+		{
+			WeakThis->bVerifyingPhone = false;
+			WeakThis->ShowStatus(LOCTEXT("NoBrowser", "Couldn't open the browser."), true);
+		}
+	});
+}
+
+void UGFCRootWidget::OnBackFromVerification()
+{
+	bVerifyingPhone = false;
+	UGFCApiClient* C = GetGameInstance()->GetSubsystem<UGFCApiSubsystem>()->GetClient();
+	if (!C->IsLoggedIn()) return;
+	TWeakObjectPtr<UGFCRootWidget> WeakThis(this);
+	C->GetVerifyStatus([WeakThis](const FGFCApiResult& R, const bool& bVerified)
+	{
+		if (!WeakThis.IsValid() || !R.bOk) return;
+		if (WeakThis->WalletScreen) WeakThis->WalletScreen->SetPhoneVerified(bVerified);
+		if (bVerified)
+		{
+			WeakThis->ShowStatus(LOCTEXT("Verified", "Phone verified. Rewards are on."));
+			WeakThis->AnnounceEarnings(); // the welcome grant and any first post bonus: ka-ching
+		}
+	});
+}
+
 void UGFCRootWidget::OnLoggedIn(bool bNewAccount)
 {
 	AnnounceEarnings();
+	GetGameInstance()->GetSubsystem<UGFCApiSubsystem>()->GetClient()->RefreshBlocks();
 	if (bReturnToSeed)
 	{
 		bReturnToSeed = false;

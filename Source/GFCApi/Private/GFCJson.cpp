@@ -334,6 +334,51 @@ bool FGFCJson::ParseUploadResult(const FString& Body, FGFCUploadResult& Out)
 	return !Out.Seed.Id.IsEmpty();
 }
 
+bool FGFCJson::ParseVerifyStatus(const FString& Body, bool& bOutVerified)
+{
+	const TSharedPtr<FJsonObject> Obj = ParseObject(Body);
+	if (!Obj.IsValid() || !Obj->HasField(TEXT("verified")))
+	{
+		return false;
+	}
+	bOutVerified = Bool(Obj, TEXT("verified"));
+	return true;
+}
+
+bool FGFCJson::ParseVerifyLink(const FString& Body, FGFCVerifyLink& Out)
+{
+	const TSharedPtr<FJsonObject> Obj = ParseObject(Body);
+	if (!Obj.IsValid() || !Obj->HasField(TEXT("verified")))
+	{
+		return false;
+	}
+	Out.bVerified = Bool(Obj, TEXT("verified"));
+	Out.Url = Str(Obj, TEXT("url"));
+	// Only ever open the node's own https page, whatever a node sends.
+	return Out.bVerified || Out.Url.StartsWith(TEXT("https://")) || Out.Url.StartsWith(TEXT("http://127.0.0.1"))
+		|| Out.Url.StartsWith(TEXT("http://localhost"));
+}
+
+bool FGFCJson::ParseBlocks(const FString& Body, TArray<FString>& Out)
+{
+	const TSharedPtr<FJsonObject> Obj = ParseObject(Body);
+	const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+	if (!Obj.IsValid() || !Obj->TryGetArrayField(TEXT("blocked"), Arr))
+	{
+		return false;
+	}
+	Out.Reset();
+	for (const TSharedPtr<FJsonValue>& V : *Arr)
+	{
+		FString Name;
+		if (V.IsValid() && V->TryGetString(Name) && !Name.IsEmpty())
+		{
+			Out.Add(Name);
+		}
+	}
+	return true;
+}
+
 bool FGFCJson::ParsePlayResult(const FString& Body, FGFCPlayResult& Out)
 {
 	const TSharedPtr<FJsonObject> Obj = ParseObject(Body);

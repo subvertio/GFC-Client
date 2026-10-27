@@ -27,6 +27,9 @@ class GFCCLIENT_API UGFCWalletScreen : public UGFCScreenBase
 public:
 	virtual void OnScreenShown() override;
 
+	/** Shows or hides the "Verify your phone" card. */
+	void SetPhoneVerified(bool bVerified);
+
 	UFUNCTION(BlueprintCallable, Category = "GFC")
 	void RefreshSelected();
 
@@ -40,6 +43,9 @@ protected:
 	// Wallet picker and balance
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidget)) TObjectPtr<UComboBoxString> WalletPicker;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidget)) TObjectPtr<UTextBlock> BalanceText;
+	/** Rewards need a verified phone: this card opens the node's verification page. Hidden once verified. */
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UWidget> VerifyPanel;
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> VerifyPhoneButton;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> WalletIdText;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> CopyIdButton;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> RefreshButton;
@@ -72,6 +78,7 @@ protected:
 private:
 	UFUNCTION() void HandlePickerChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
 	UFUNCTION() void HandleCreateWallet();
+	UFUNCTION() void HandleVerifyPhone();
 	UFUNCTION() void HandleAddWallet();
 	UFUNCTION() void HandleCopyId();
 	UFUNCTION() void HandleRefresh();

@@ -87,6 +87,7 @@ void UGFCSeedCard::NativeOnInitialized()
 	if (CardButton) CardButton->OnClicked.AddDynamic(this, &ThisClass::HandleClicked);
 	if (MediaButton) MediaButton->OnClicked.AddDynamic(this, &ThisClass::HandleMediaClicked);
 	if (SoundButton) SoundButton->OnClicked.AddDynamic(this, &ThisClass::HandleSoundClicked);
+	if (MoreButton) MoreButton->OnClicked.AddDynamic(this, &ThisClass::HandleMoreClicked);
 	if (UGFCCacheSubsystem* Cache = GetGameInstance()->GetSubsystem<UGFCCacheSubsystem>())
 	{
 		// Another card (or the detail screen) became the live heavy item: stop playing here.
@@ -142,6 +143,15 @@ void UGFCSeedCard::BuildDefaultLayout()
 	HandleText->SetAutoWrapText(false);
 	AddH(Header, OwnerText, 6.f);
 	AddH(Header, HandleText, 0.f, true);
+	// Report / block: a small target of its own, so it never opens the post by accident.
+	MoreButton = T->ConstructWidget<UButton>();
+	MoreButton->SetStyle(FlatButtonStyle());
+	MoreButton->SetTouchMethod(EButtonTouchMethod::PreciseTap);
+	UTextBlock* Dots = MakeText(T, FText::FromString(TEXT("\u2022\u2022\u2022")), 15, TextDim, true);
+	Dots->SetAutoWrapText(false);
+	MoreButton->AddChild(Dots);
+	if (UButtonSlot* S = Cast<UButtonSlot>(Dots->Slot)) S->SetPadding(FMargin(10.f, 0.f, 4.f, 6.f));
+	AddH(Header, MoreButton, 0.f);
 	AddV(Body, Header, 2.f);
 
 	RepostText = MakeText(T, FText::GetEmpty(), 13, TextDim);
@@ -376,6 +386,11 @@ void UGFCSeedCard::HandleMediaClicked()
 			WeakThis->Tracker.Begin(Id, Kind, Client->IsLoggedIn() && WeakThis->Seed.Owner.Equals(Client->GetUsername(), ESearchCase::IgnoreCase));
 			WeakThis->UpdateMediaControls();
 		});
+}
+
+void UGFCSeedCard::HandleMoreClicked()
+{
+	OnMore.ExecuteIfBound(Seed);
 }
 
 void UGFCSeedCard::HandleSoundClicked()
