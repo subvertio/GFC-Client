@@ -1,0 +1,5 @@
+#include "GFCApi.h"
+
+DEFINE_LOG_CATEGORY(LogGFCApi);
+
+IMPLEMENT_MODULE(FGFCApiModule, GFCApi);

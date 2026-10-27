@@ -1,0 +1,34 @@
+# Unreal build output and caches
+Binaries/
+Intermediate/
+Saved/
+DerivedDataCache/
+**/Plugins/*/Binaries/
+**/Plugins/*/Intermediate/
+
+# IDE / generated project files
+.vs/
+.vscode/
+.idea/
+*.sln
+*.slnx
+*.suo
+*.opensdf
+*.sdf
+*.VC.db
+*.VC.opendb
+*.xcworkspace
+*.xcodeproj
+compile_commands.json
+
+# Packaged builds and local outputs
+Build/Windows/
+Build/Android/
+Packaged/
+*.apk
+*.aab
+*.pdb
+
+# Never commit session data or wallet backups
+*.sav
+*-wallet-backup-*.json
