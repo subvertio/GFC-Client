@@ -146,7 +146,16 @@ void UGFCWalletScreen::BuildDefaultLayout()
 		AddV(Col, SendButton, 0.f);
 	}
 
-	// 5. History, last: rows are added to a plain box inside the page's scroll.
+	// 5. Bridge to Base: the ERC-20 lives on its own screen (rules, review, confirm).
+	{
+		UVerticalBox* Col = Section(T, Left, LOCTEXT("Bridge", "Bridge to Base"));
+		AddV(Col, MakeText(T, LOCTEXT("BridgeWhy",
+			"Move GFC to the GFC token on Base to hold it in an Ethereum wallet or swap it. Not an investment."), 12, TextDim), 12.f);
+		BridgeButton = MakeButton(T, LOCTEXT("BridgeBtn", "Bridge to Base"), PanelRaised);
+		AddV(Col, BridgeButton, 0.f);
+	}
+
+	// 6. History, last: rows are added to a plain box inside the page's scroll.
 	{
 		UVerticalBox* Col = Section(T, Left, LOCTEXT("History", "History"));
 		HistoryList = MakeColumn(T);
@@ -164,6 +173,7 @@ void UGFCWalletScreen::BindEvents()
 	if (RefreshButton) RefreshButton->OnClicked.AddDynamic(this, &ThisClass::HandleRefresh);
 	if (ExportButton) ExportButton->OnClicked.AddDynamic(this, &ThisClass::HandleExport);
 	if (SendButton) SendButton->OnClicked.AddDynamic(this, &ThisClass::HandleSend);
+	if (BridgeButton) BridgeButton->OnClicked.AddDynamic(this, &ThisClass::HandleBridge);
 }
 
 void UGFCWalletScreen::SetPhoneVerified(bool bVerified)
@@ -239,6 +249,7 @@ void UGFCWalletScreen::RebuildPicker(const FString& SelectId)
 	WalletPicker->SetVisibility(bAny ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	if (NoWalletText) NoWalletText->SetVisibility(bAny ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
 	if (SendButton) SendButton->SetIsEnabled(bAny);
+	if (BridgeButton) BridgeButton->SetIsEnabled(bAny);
 	if (!bAny)
 	{
 		if (BalanceText) BalanceText->SetText(FText::GetEmpty());
@@ -517,6 +528,14 @@ void UGFCWalletScreen::HandleExport()
 		WeakThis->ShowStatus(LOCTEXT("BackedUp", "Backup saved."));
 		WeakThis->UpdateBackupPrompt();
 	});
+}
+
+void UGFCWalletScreen::HandleBridge()
+{
+	if (Root.IsValid() && !SelectedWalletId.IsEmpty())
+	{
+		Root->ShowBridge(SelectedWalletId);
+	}
 }
 
 void UGFCWalletScreen::SetSendBusy(bool bBusy)

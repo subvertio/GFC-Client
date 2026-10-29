@@ -384,6 +384,48 @@ void UGFCApiClient::CreateVerifyLink(TCallback<FGFCVerifyLink> Done)
 		MoveTemp(Done));
 }
 
+void UGFCApiClient::GetBridgeInfo(TCallback<FGFCBridgeInfo> Done)
+{
+	Call<FGFCBridgeInfo>(TEXT("GET"), TEXT("/bridge/info"), FString(), FString(), false, &FGFCJson::ParseBridgeInfo, MoveTemp(Done));
+}
+
+void UGFCApiClient::GetBridgeQuote(const FString& WalletId, TCallback<FGFCBridgeQuote> Done)
+{
+	Call<FGFCBridgeQuote>(TEXT("GET"), FGFCUrl::WithQuery(TEXT("/bridge/quote"), {{TEXT("wallet_id"), WalletId}}), FString(),
+		FString(), false, &FGFCJson::ParseBridgeQuote, MoveTemp(Done));
+}
+
+void UGFCApiClient::BridgeDeposit(const FString& WalletId, int64 ChainId, const FString& EvmAddress, int64 AmountCents,
+	TCallback<FGFCBridgeDeposit> Done)
+{
+	if (AmountCents <= 0)
+	{
+		FireLater<FGFCBridgeDeposit>(MoveTemp(Done), FGFCApiResult::Failure(400, TEXT("Enter an amount greater than zero.")));
+		return;
+	}
+	if (WalletId.IsEmpty() || ChainId <= 0)
+	{
+		FireLater<FGFCBridgeDeposit>(MoveTemp(Done), FGFCApiResult::Failure(400, TEXT("Choose a wallet and a chain.")));
+		return;
+	}
+	if (!FGFCJson::IsEvmAddress(EvmAddress))
+	{
+		FireLater<FGFCBridgeDeposit>(MoveTemp(Done),
+			FGFCApiResult::Failure(400, TEXT("Enter your Base address: 0x followed by 40 letters and digits.")));
+		return;
+	}
+	const TSharedRef<FJsonObject> Json = MakeShared<FJsonObject>();
+	Json->SetStringField(TEXT("wallet_id"), WalletId);
+	Json->SetNumberField(TEXT("chain_id"), double(ChainId));
+	Json->SetStringField(TEXT("evm_address"), EvmAddress.TrimStartAndEnd());
+	Json->SetNumberField(TEXT("amount"), double(AmountCents) / 100.0); // the node rounds to the nearest cent
+	FString Body;
+	const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Body);
+	FJsonSerializer::Serialize(Json, Writer);
+	Call<FGFCBridgeDeposit>(TEXT("POST"), TEXT("/bridge/deposit"), JsonContentType, Body, true, &FGFCJson::ParseBridgeDeposit,
+		MoveTemp(Done));
+}
+
 void UGFCApiClient::SearchSeeds(const FString& Query, TCallback<TArray<FGFCSeed>> Done)
 {
 	Call<TArray<FGFCSeed>>(TEXT("GET"), FGFCUrl::WithQuery(TEXT("/search"), {{TEXT("q"), Query}}), FString(), FString(),

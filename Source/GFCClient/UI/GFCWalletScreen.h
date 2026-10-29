@@ -75,6 +75,9 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UEditableTextBox> ReasonBox;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidget)) TObjectPtr<UButton> SendButton;
 
+	// Bridge to Base: opens UGFCBridgeScreen for the selected wallet.
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> BridgeButton;
+
 	// History: rows are added as children of this panel.
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidget)) TObjectPtr<UPanelWidget> HistoryList;
 
@@ -87,6 +90,7 @@ private:
 	UFUNCTION() void HandleRefresh();
 	UFUNCTION() void HandleExport();
 	UFUNCTION() void HandleSend();
+	UFUNCTION() void HandleBridge();
 
 	void RebuildPicker(const FString& SelectId);
 	/** This device's wallets changed (created, added, learned from the node): the picker and the right rail. */

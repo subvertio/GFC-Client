@@ -460,6 +460,97 @@ bool FGFCJson::ParseNetworkStats(const FString& Body, FGFCNetworkStats& Out)
 	return true;
 }
 
+bool FGFCJson::IsEvmAddress(const FString& Text)
+{
+	const FString A = Text.TrimStartAndEnd();
+	if (A.Len() != 42 || !A.StartsWith(TEXT("0x"), ESearchCase::CaseSensitive))
+	{
+		return false;
+	}
+	bool bNonZero = false;
+	for (int32 i = 2; i < A.Len(); ++i)
+	{
+		if (!FChar::IsHexDigit(A[i]))
+		{
+			return false;
+		}
+		bNonZero |= A[i] != TEXT('0');
+	}
+	return bNonZero;
+}
+
+bool FGFCJson::ParseBridgeInfo(const FString& Body, FGFCBridgeInfo& Out)
+{
+	const TSharedPtr<FJsonObject> Obj = ParseObject(Body);
+	const TArray<TSharedPtr<FJsonValue>>* Chains = nullptr;
+	if (!Obj.IsValid() || !Obj->HasField(TEXT("enabled")) || !Obj->TryGetArrayField(TEXT("chains"), Chains))
+	{
+		return false;
+	}
+	Out = FGFCBridgeInfo();
+	for (const TSharedPtr<FJsonValue>& V : *Chains)
+	{
+		const TSharedPtr<FJsonObject>* C = nullptr;
+		if (!V.IsValid() || !V->TryGetObject(C))
+		{
+			continue;
+		}
+		FGFCBridgeChain Chain;
+		Chain.ChainId = Int(*C, TEXT("chain_id"));
+		Chain.Name = Str(*C, TEXT("name"));
+		Chain.EscrowWallet = Str(*C, TEXT("escrow_wallet"));
+		Chain.TokenAddress = Str(*C, TEXT("token_address"));
+		if (!IsEvmAddress(Chain.TokenAddress))
+		{
+			Chain.TokenAddress.Reset();
+		}
+		if (Chain.ChainId > 0 && !Chain.EscrowWallet.IsEmpty())
+		{
+			if (Chain.Name.IsEmpty())
+			{
+				Chain.Name = FString::Printf(TEXT("Chain %lld"), Chain.ChainId);
+			}
+			Out.Chains.Add(MoveTemp(Chain));
+		}
+	}
+	Out.bEnabled = Bool(Obj, TEXT("enabled")) && Out.Chains.Num() > 0;
+	Out.MinDepositCents = FMath::Max<int64>(0, Int(Obj, TEXT("min_deposit_cents")));
+	Out.RelayFeeCents = FMath::Max<int64>(0, Int(Obj, TEXT("relay_fee_cents")));
+	Out.FaucetHoldDays = FMath::Max(0.0, Num(Obj, TEXT("faucet_hold_days")));
+	Out.Notice = Str(Obj, TEXT("notice"));
+	return true;
+}
+
+bool FGFCJson::ParseBridgeQuote(const FString& Body, FGFCBridgeQuote& Out)
+{
+	const TSharedPtr<FJsonObject> Obj = ParseObject(Body);
+	if (!Obj.IsValid() || !Obj->HasField(TEXT("balance_cents")) || !Obj->HasField(TEXT("bridgeable_cents")))
+	{
+		return false;
+	}
+	Out.BalanceCents = FMath::Max<int64>(0, Int(Obj, TEXT("balance_cents")));
+	Out.BridgeableCents = FMath::Clamp<int64>(Int(Obj, TEXT("bridgeable_cents")), 0, Out.BalanceCents);
+	Out.HeldCents = Out.BalanceCents - Out.BridgeableCents;
+	return true;
+}
+
+bool FGFCJson::ParseBridgeDeposit(const FString& Body, FGFCBridgeDeposit& Out)
+{
+	const TSharedPtr<FJsonObject> Obj = ParseObject(Body);
+	if (!Obj.IsValid() || !Bool(Obj, TEXT("ok")) || Str(Obj, TEXT("tx_hash")).IsEmpty())
+	{
+		return false;
+	}
+	Out.TxId = Str(Obj, TEXT("tx_id"));
+	Out.TxHash = Str(Obj, TEXT("tx_hash"));
+	Out.ChainId = Int(Obj, TEXT("chain_id"));
+	Out.EvmAddress = Str(Obj, TEXT("evm_address"));
+	Out.AmountCents = Int(Obj, TEXT("amount_cents"));
+	Out.MintCents = Int(Obj, TEXT("mint_cents"));
+	Out.Status = Str(Obj, TEXT("status"));
+	return true;
+}
+
 bool FGFCJson::ParsePlayResult(const FString& Body, FGFCPlayResult& Out)
 {
 	const TSharedPtr<FJsonObject> Obj = ParseObject(Body);

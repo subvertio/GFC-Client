@@ -256,6 +256,52 @@ struct GFCAPI_API FGFCNetworkStats
 	TArray<FGFCTopEarner> TopEarners;
 };
 
+/** One chain from GET /bridge/info: where wrapped GFC lives, and the ledger escrow that backs it. */
+struct GFCAPI_API FGFCBridgeChain
+{
+	int64 ChainId = 0;
+	FString Name;
+	/** The ledger wallet deposits go to (the node signs them; never shown as a send target). */
+	FString EscrowWallet;
+	/** The ERC-20 contract, or empty until the node operator publishes it: don't bridge before then. */
+	FString TokenAddress;
+};
+
+/** GET /bridge/info: the chains this node bridges to, and the deposit rules. */
+struct GFCAPI_API FGFCBridgeInfo
+{
+	bool bEnabled = false;
+	TArray<FGFCBridgeChain> Chains;
+	int64 MinDepositCents = 0;
+	/** Taken out of the minted amount. */
+	int64 RelayFeeCents = 0;
+	/** Free credit (welcome grant, invite and post bonuses) can be bridged this many days after it arrives. */
+	double FaucetHoldDays = 0.0;
+	/** Shown next to the button: not an investment, unaudited, start small. */
+	FString Notice;
+};
+
+/** GET /bridge/quote: how much of a wallet's balance can be bridged now. */
+struct GFCAPI_API FGFCBridgeQuote
+{
+	int64 BalanceCents = 0;
+	int64 BridgeableCents = 0;
+	/** Fresh free credit that has to age first. */
+	int64 HeldCents = 0;
+};
+
+/** POST /bridge/deposit: the signed escrow deposit. Tokens are minted later, after the finality wait. */
+struct GFCAPI_API FGFCBridgeDeposit
+{
+	FString TxId;
+	FString TxHash;
+	int64 ChainId = 0;
+	FString EvmAddress;
+	int64 AmountCents = 0;
+	int64 MintCents = 0;
+	FString Status;
+};
+
 /** One request, for the debug overlay. Never holds the token, bodies or query strings. */
 struct GFCAPI_API FGFCApiTrace
 {

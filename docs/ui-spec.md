@@ -311,8 +311,34 @@ yet, so the picker shows wallets this device created or was given ("Add by ID"),
 | `RecipientBox`, `AmountBox` | EditableTextBox | yes | Amount like `2.50`, at most two decimals. |
 | `ReasonBox` | EditableTextBox | no | Note. |
 | `SendButton` | Button | yes | |
+| `BridgeButton` | Button | no | "Bridge to Base": opens the bridge screen for the selected wallet. |
 | `HistoryList` | any panel | yes | Rows: "+/−amount GFC", note, counterparty, type, time. |
 
 Backup copy (keep the meaning): wallet keys live encrypted on the node and are unlocked by the password;
 forgetting it or losing the node's data loses the GFC; there is no reset; keep the file and passphrase safe and
 apart; anyone with both can spend.
+
+## Bridge to Base (`GFCBridgeScreen`)
+
+Moves GFC from a ledger wallet to the GFC ERC-20 on Base. Opened from the wallet screen; Back (and Android Back)
+return to the wallet. The node signs the escrow deposit with the exact reason the bridge mints for: the app never
+builds it, and never shows the escrow as a send target.
+
+| Part | Type | Required | Notes |
+|---|---|---|---|
+| `UnavailableText` | TextBlock | yes | Shown instead of the form while loading, when the node doesn't bridge (`enabled: false`, or no `/bridge` endpoints on an older node), when the chain's `token_address` isn't published yet, or with no wallet. |
+| `FormPanel` | any widget | yes | The form; collapsed in those cases. |
+| `NoticeText` | TextBlock | no | The node's `notice` (not an investment, new code, start small), in a warning-outlined card. **Keep it above the form.** |
+| `ChainPicker` | ComboBoxString | no | Hidden when the node bridges to one chain. |
+| `WalletPicker` | ComboBoxString | yes | Same wallets as the wallet screen. |
+| `BridgeableText`, `HeldText` | TextBlock | yes, no | `bridgeable_cents` from `GET /bridge/quote`, and why the rest is held (fresh free credit, also when passed on from another wallet, can go after `faucet_hold_days`). |
+| `AddressBox` | EditableTextBox | yes | `0x` + 40 hex digits, not the zero address (`FGFCJson::IsEvmAddress`). |
+| `AmountBox`, `MaxButton` | EditableTextBox, Button | yes, no | Max fills in the bridgeable amount. |
+| `RulesText` | TextBlock | no | Minimum, fee (taken from what's minted), the safety wait, and "check the address". |
+| `SummaryText` | TextBlock | no | The review: amount, wallet, what's minted, to which address on which chain, "can't be undone". |
+| `BridgeButton`, `BridgeButtonLabel` | Button, TextBlock | yes, no | Two taps: "Review", then "Confirm: bridge now". Editing anything after the review needs a new review. |
+| `CancelButton` | Button | no | "Change something": leaves the review. |
+| `ResultText` | TextBlock | no | The deposit's tx and what will be minted. Tokens arrive after the bridge's finality wait, not at once. |
+| `BackButton` | Button | no | Back to the wallet. |
+
+Calls: `GET /bridge/info`, `GET /bridge/quote?wallet_id=`, `POST /bridge/deposit` (Bearer, `spend` scope).

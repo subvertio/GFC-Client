@@ -126,6 +126,19 @@ public:
 	/** A one-time page to verify the phone in the browser (Cloudflare Turnstile only runs in web pages). */
 	void CreateVerifyLink(TCallback<FGFCVerifyLink> Done);
 
+	// ---- Bridge to Base (ledger GFC -> the ERC-20) ----
+
+	/** Chains the node bridges to and the deposit rules (public). */
+	void GetBridgeInfo(TCallback<FGFCBridgeInfo> Done);
+	/** How much of the wallet's balance can be bridged now (public). */
+	void GetBridgeQuote(const FString& WalletId, TCallback<FGFCBridgeQuote> Done);
+	/**
+	 * Moves GFC from the caller's wallet into the chain's escrow; the node signs it with the exact
+	 * reason the bridge mints for. Irreversible: confirm with the user first. Needs the spend scope.
+	 */
+	void BridgeDeposit(const FString& WalletId, int64 ChainId, const FString& EvmAddress, int64 AmountCents,
+		TCallback<FGFCBridgeDeposit> Done);
+
 	// ---- report / block ----
 
 	/** Reason is one of the node's: spam, nudity, violence, harassment, hate, scam, copyright, other. */

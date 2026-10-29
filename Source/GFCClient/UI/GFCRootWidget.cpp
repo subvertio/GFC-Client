@@ -28,6 +28,7 @@
 #include "UI/GFCFeedScreen.h"
 #include "UI/GFCLoginScreen.h"
 #include "UI/GFCSeedDetailScreen.h"
+#include "UI/GFCBridgeScreen.h"
 #include "GFCApi.h"
 #include "UI/GFCActionSheet.h"
 #include "UI/GFCMusicWidgets.h"
@@ -75,6 +76,7 @@ UGFCRootWidget::UGFCRootWidget(const FObjectInitializer& ObjectInitializer)
 	WalletScreenClass = UGFCWalletScreen::StaticClass();
 	SeedDetailScreenClass = UGFCSeedDetailScreen::StaticClass();
 	CreateScreenClass = UGFCCreateScreen::StaticClass();
+	BridgeScreenClass = UGFCBridgeScreen::StaticClass();
 }
 
 void UGFCRootWidget::NativeOnInitialized()
@@ -101,6 +103,7 @@ void UGFCRootWidget::NativeOnInitialized()
 	WalletScreen = AddScreen(CreateWidget<UGFCWalletScreen>(this, WalletScreenClass));
 	SeedDetailScreen = AddScreen(CreateWidget<UGFCSeedDetailScreen>(this, SeedDetailScreenClass));
 	CreateScreen = AddScreen(CreateWidget<UGFCCreateScreen>(this, CreateScreenClass));
+	BridgeScreen = AddScreen(CreateWidget<UGFCBridgeScreen>(this, BridgeScreenClass));
 
 	if (FeedNavButton) FeedNavButton->OnClicked.AddDynamic(this, &ThisClass::ShowFeed);
 	if (WalletNavButton) WalletNavButton->OnClicked.AddDynamic(this, &ThisClass::ShowWallet);
@@ -374,7 +377,7 @@ void UGFCRootWidget::UpdateDesktopNav()
 		return;
 	}
 	EGFCNavItem Item = EGFCNavItem::None;
-	if (ActiveScreen == WalletScreen)
+	if (ActiveScreen == WalletScreen || ActiveScreen == BridgeScreen)
 	{
 		Item = EGFCNavItem::Wallet;
 	}
@@ -508,6 +511,15 @@ void UGFCRootWidget::ComposeFromFeed(const FString& PostBody, TOptional<EGFCCapt
 void UGFCRootWidget::ShowWallet() { Activate(WalletScreen); }
 void UGFCRootWidget::ShowCreate() { Activate(CreateScreen); }
 
+void UGFCRootWidget::ShowBridge(const FString& WalletId)
+{
+	if (BridgeScreen)
+	{
+		BridgeScreen->SetWallet(WalletId);
+		Activate(BridgeScreen);
+	}
+}
+
 void UGFCRootWidget::ShowSeed(const FGFCSeed& Seed)
 {
 	if (SeedDetailScreen)
@@ -565,6 +577,11 @@ bool UGFCRootWidget::HandleBack()
 	if (ActiveScreen == FeedScreen || ActiveScreen == LoginScreen)
 	{
 		return false;
+	}
+	if (ActiveScreen == BridgeScreen)
+	{
+		ShowWallet();
+		return true;
 	}
 	GoBack();
 	return true;

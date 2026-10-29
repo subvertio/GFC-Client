@@ -8,6 +8,7 @@
 
 class UBorder;
 class UButton;
+class UGFCBridgeScreen;
 class UGFCCreateScreen;
 class UGFCLeftRail;
 class UGFCRightRail;
@@ -45,6 +46,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GFC|Screens") TSubclassOf<UGFCWalletScreen> WalletScreenClass;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GFC|Screens") TSubclassOf<UGFCSeedDetailScreen> SeedDetailScreenClass;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GFC|Screens") TSubclassOf<UGFCCreateScreen> CreateScreenClass;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GFC|Screens") TSubclassOf<UGFCBridgeScreen> BridgeScreenClass;
 
 	UGFCRootWidget(const FObjectInitializer& ObjectInitializer);
 
@@ -52,6 +54,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "GFC|Navigation") void ShowFeed();
 	UFUNCTION(BlueprintCallable, Category = "GFC|Navigation") void ShowWallet();
 	UFUNCTION(BlueprintCallable, Category = "GFC|Navigation") void ShowCreate();
+	/** Bridge to Base, starting from WalletId (the wallet screen's selection). Back returns to the wallet. */
+	UFUNCTION(BlueprintCallable, Category = "GFC|Navigation") void ShowBridge(const FString& WalletId);
 	UFUNCTION(BlueprintCallable, Category = "GFC|Navigation") void ShowSeed(const FGFCSeed& Seed);
 	/** The For you feed (desktop Home; the phone's Feed button keeps the feed's current page). */
 	UFUNCTION(BlueprintCallable, Category = "GFC|Navigation") void ShowHome();
@@ -148,6 +152,7 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UGFCWalletScreen> WalletScreen;
 	UPROPERTY(Transient) TObjectPtr<UGFCSeedDetailScreen> SeedDetailScreen;
 	UPROPERTY(Transient) TObjectPtr<UGFCCreateScreen> CreateScreen;
+	UPROPERTY(Transient) TObjectPtr<UGFCBridgeScreen> BridgeScreen;
 	UPROPERTY(Transient) TObjectPtr<UGFCScreenBase> ActiveScreen;
 
 	FDelegateHandle DeepLinkHandle;
