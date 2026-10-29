@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "UI/GFCKeyboardScroll.h"
 #include "GFCScreenBase.generated.h"
 
 class UGFCApiClient;
@@ -32,6 +33,8 @@ public:
 
 protected:
 	virtual void NativeOnInitialized() override;
+	/** Keeps the field you're typing in above the on-screen keyboard. Subclasses call Super. */
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
 	/** Builds the default code layout. Only runs when no Blueprint supplied a widget tree. */
 	virtual void BuildDefaultLayout() {}
@@ -48,4 +51,7 @@ protected:
 	void ShowStatus(const FText& Message, bool bError = false) const;
 
 	TWeakObjectPtr<UGFCRootWidget> Root;
+
+private:
+	FGFCKeyboardScroll KeyboardScroll;
 };

@@ -60,7 +60,7 @@ void UGFCCreateScreen::BuildDefaultLayout()
 	UVerticalBox* Col = MakeColumn(T);
 	Scroll->AddChild(Col);
 
-	// Top to bottom, in the order you do it: write, add media (optional), title, post.
+	// Top to bottom, in the order you do it: title, write, add media (optional), post.
 	// Header: the screen's name and a Post button that's always in reach, however long the form gets.
 	UHorizontalBox* Header = MakeRow(T);
 	AddH(Header, MakeText(T, LOCTEXT("Title", "New post"), 22, Text, true), 0.f, true);
@@ -68,6 +68,10 @@ void UGFCCreateScreen::BuildDefaultLayout()
 	AddH(Header, HeaderPostButton, 0.f);
 	if (UHorizontalBoxSlot* S = Cast<UHorizontalBoxSlot>(HeaderPostButton->Slot)) S->SetVerticalAlignment(VAlign_Center);
 	AddV(Col, Header, 12.f);
+
+	// Title first, at the top of the form: it stays in view above the keyboard while you type it.
+	TitleBox = MakeInput(T, LOCTEXT("TitleHint", "Title (optional for text)"));
+	AddV(Col, MakeField(T, LOCTEXT("TitleL", "Title"), TitleBox), 10.f);
 
 	BodyBox = MakeMultiLineInput(T, LOCTEXT("BodyHint", "What's on your mind?"));
 	USizeBox* BodySize = T->ConstructWidget<USizeBox>();
@@ -122,9 +126,6 @@ void UGFCCreateScreen::BuildDefaultLayout()
 	AddV(M, RemoveMediaButton, 14.f);
 	MediaPanel = M;
 	AddV(F, M, 0.f);
-
-	TitleBox = MakeInput(T, LOCTEXT("TitleHint", "Title (optional for text)"));
-	AddV(F, MakeField(T, LOCTEXT("TitleL", "Title"), TitleBox), 14.f);
 
 	PostButton = MakeButton(T, LOCTEXT("Post", "Post"));
 	AddV(F, PostButton, 10.f);
