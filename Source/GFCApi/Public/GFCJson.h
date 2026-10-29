@@ -37,6 +37,12 @@ struct GFCAPI_API FGFCJson
 	/** POST /seeds/{id}/like ({"liked", "like_count"}) and /bookmark ({"bookmarked"}). */
 	static bool ParseToggle(const FString& Body, FGFCToggleResult& Out);
 	static bool ParseNetworkStats(const FString& Body, FGFCNetworkStats& Out);
+	/** GET /bridge/info. Chains without an id or escrow are dropped; a malformed token address reads as none. */
+	static bool ParseBridgeInfo(const FString& Body, FGFCBridgeInfo& Out);
+	static bool ParseBridgeQuote(const FString& Body, FGFCBridgeQuote& Out);
+	static bool ParseBridgeDeposit(const FString& Body, FGFCBridgeDeposit& Out);
+	/** "0x" and 40 hex digits, not the zero address. Surrounding spaces are ignored. */
+	static bool IsEvmAddress(const FString& Text);
 	static void ReadRepost(const TSharedPtr<FJsonObject>& Obj, FGFCRepostInfo& Out);
 
 	static void ReadSeed(const TSharedPtr<FJsonObject>& Obj, FGFCSeed& Out);

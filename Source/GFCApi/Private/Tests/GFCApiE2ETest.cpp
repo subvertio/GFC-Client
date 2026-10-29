@@ -4,6 +4,10 @@
 //
 // Optional:
 //   -GFCE2EExpectSeed=<id>   assert this seed is in the feed and readable
+//   -GFCE2EBridgeUser=<name> -GFCE2EBridgeWallet=<id> -GFCE2EBridgeTo=<0x address>
+//                            Bridge to Base against a node with bridging on: logs in as that
+//                            pre-funded test account (password in env GFC_E2E_BRIDGE_PASSWORD, never
+//                            on the command line) and deposits 150 GFC from the wallet
 //   -GFCE2ESaveSession       leave the test user logged in (SaveGame slot) so a
 //                            -game run opens straight to the feed
 
@@ -401,6 +405,91 @@ bool FGFCLocalNodeE2ETest::RunTest(const FString&)
 			});
 		});
 	});
+	FString BridgeUser, BridgeWallet, BridgeTo;
+	FParse::Value(FCommandLine::Get(), TEXT("GFCE2EBridgeUser="), BridgeUser);
+	FParse::Value(FCommandLine::Get(), TEXT("GFCE2EBridgeWallet="), BridgeWallet);
+	FParse::Value(FCommandLine::Get(), TEXT("GFCE2EBridgeTo="), BridgeTo);
+	if (!BridgeUser.IsEmpty())
+	{
+		struct FBridgeState
+		{
+			FGFCBridgeInfo Info;
+			FGFCBridgeQuote Quote;
+			UGFCApiClient* B = nullptr;
+		};
+		TSharedRef<FBridgeState> BS = MakeShared<FBridgeState>();
+		Run->Add(TEXT("bridge info"), [this, C, BS](auto Next)
+		{
+			C->GetBridgeInfo([this, BS, Next](const FGFCApiResult& R, const FGFCBridgeInfo& I)
+			{
+				TestTrue(FString::Printf(TEXT("bridge info ok (%s)"), *R.Error), R.bOk);
+				TestTrue(TEXT("bridging enabled"), I.bEnabled);
+				TestTrue(TEXT("a chain with a token"), I.Chains.Num() > 0 && !I.Chains[0].TokenAddress.IsEmpty());
+				BS->Info = I;
+				Next();
+			});
+		});
+		Run->Add(TEXT("bridge: bad address refused before the node"), [this, C, BridgeWallet, BS](auto Next)
+		{
+			const int64 Chain = BS->Info.Chains.Num() ? BS->Info.Chains[0].ChainId : 1;
+			C->BridgeDeposit(BridgeWallet, Chain, TEXT("0x1234"), 15000, [this, Next](const FGFCApiResult& R, const FGFCBridgeDeposit&)
+			{
+				TestEqual(TEXT("refused locally"), R.StatusCode, 400);
+				Next();
+			});
+		});
+		Run->Add(TEXT("bridge: log in and quote"), [this, Node, BridgeUser, BridgeWallet, BS](auto Next)
+		{
+			BS->B = NewObject<UGFCApiClient>();
+			BS->B->AddToRoot();
+			BS->B->SetBaseUrl(Node);
+			BS->B->TimeoutSeconds = 20.f;
+			const FString Password = FPlatformMisc::GetEnvironmentVariable(TEXT("GFC_E2E_BRIDGE_PASSWORD"));
+			BS->B->Login(BridgeUser, Password, [this, BridgeWallet, BS, Next](const FGFCApiResult& R, const FGFCAuthResult&)
+			{
+				TestTrue(FString::Printf(TEXT("bridge account login (%s)"), *R.Error), R.bOk);
+				BS->B->GetBridgeQuote(BridgeWallet, [this, BS, Next](const FGFCApiResult& Q, const FGFCBridgeQuote& Quote)
+				{
+					TestTrue(FString::Printf(TEXT("quote ok (%s)"), *Q.Error), Q.bOk);
+					TestTrue(TEXT("at least 150 GFC bridgeable"), Quote.BridgeableCents >= 15000);
+					BS->Quote = Quote;
+					AddInfo(FString::Printf(TEXT("quote: balance %s, bridgeable %s, held %s"),
+						*FGFCJson::FormatCents(Quote.BalanceCents), *FGFCJson::FormatCents(Quote.BridgeableCents),
+						*FGFCJson::FormatCents(Quote.HeldCents)));
+					Next();
+				});
+			});
+		});
+		Run->Add(TEXT("bridge: more than bridgeable refused by the node"), [this, BridgeWallet, BridgeTo, BS](auto Next)
+		{
+			BS->B->BridgeDeposit(BridgeWallet, BS->Info.Chains[0].ChainId, BridgeTo, BS->Quote.BridgeableCents + 100,
+				[this, Next](const FGFCApiResult& R, const FGFCBridgeDeposit&)
+				{
+					TestEqual(TEXT("node says 400"), R.StatusCode, 400);
+					AddInfo(FString::Printf(TEXT("over-limit message: %s"), *R.Error));
+					Next();
+				});
+		});
+		Run->Add(TEXT("bridge: deposit 150 GFC"), [this, BridgeWallet, BridgeTo, BS](auto Next)
+		{
+			BS->B->BridgeDeposit(BridgeWallet, BS->Info.Chains[0].ChainId, BridgeTo, 15000,
+				[this, BridgeWallet, BS, Next](const FGFCApiResult& R, const FGFCBridgeDeposit& D)
+				{
+					TestTrue(FString::Printf(TEXT("deposit ok (%s)"), *R.Error), R.bOk);
+					TestEqual(TEXT("amount"), D.AmountCents, int64(15000));
+					TestEqual(TEXT("minted after the fee"), D.MintCents, int64(15000) - BS->Info.RelayFeeCents);
+					TestFalse(TEXT("tx hash"), D.TxHash.IsEmpty());
+					AddInfo(FString::Printf(TEXT("deposit tx %s, %s GFC to be minted to %s"), *D.TxHash,
+						*FGFCJson::FormatCents(D.MintCents), *D.EvmAddress));
+					BS->B->GetBridgeQuote(BridgeWallet, [this, BS, Next](const FGFCApiResult& Q, const FGFCBridgeQuote& After)
+					{
+						TestEqual(TEXT("bridgeable went down by 150"), After.BridgeableCents, BS->Quote.BridgeableCents - 15000);
+						BS->B->RemoveFromRoot();
+						Next();
+					});
+				});
+		});
+	}
 	Run->Add(TEXT("logout revokes the token"), [this, C, X](auto Next)
 	{
 		X->OldToken = C->GetTokenForStorage();
