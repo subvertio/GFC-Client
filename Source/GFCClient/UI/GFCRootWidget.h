@@ -92,6 +92,9 @@ public:
 	/** Opens the node's phone verification page in the browser; the balance is checked on return. */
 	void StartPhoneVerification();
 
+	/** Reloads the right rail (balance, top earners) when it's showing, e.g. after this device learns a wallet. */
+	void RefreshRightRail();
+
 protected:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeDestruct() override;

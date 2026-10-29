@@ -89,6 +89,8 @@ private:
 	UFUNCTION() void HandleSend();
 
 	void RebuildPicker(const FString& SelectId);
+	/** This device's wallets changed (created, added, learned from the node): the picker and the right rail. */
+	void OnWalletsChanged(const FString& SelectId);
 	void UpdateBackupPrompt();
 	void ShowHistory(const TArray<FGFCTransaction>& Transactions);
 	void SetSendBusy(bool bBusy);

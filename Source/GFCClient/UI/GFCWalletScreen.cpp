@@ -173,7 +173,13 @@ void UGFCWalletScreen::SetPhoneVerified(bool bVerified)
 
 void UGFCWalletScreen::OnWalletsLearned()
 {
-	RebuildPicker(SelectedWalletId);
+	OnWalletsChanged(SelectedWalletId);
+}
+
+void UGFCWalletScreen::OnWalletsChanged(const FString& SelectId)
+{
+	RebuildPicker(SelectId);
+	if (Root.IsValid()) Root->RefreshRightRail();  // the "Your GFC" card counts this device's wallets too
 }
 
 void UGFCWalletScreen::HandleVerifyPhone()
@@ -409,7 +415,7 @@ void UGFCWalletScreen::HandleCreateWallet()
 		}
 		if (WeakThis->NewWalletNameBox) WeakThis->NewWalletNameBox->SetText(FText::GetEmpty());
 		WeakThis->ShowStatus(LOCTEXT("Created", "Wallet created. Now back it up: see the orange box."));
-		WeakThis->RebuildPicker(W.Id);
+		WeakThis->OnWalletsChanged(W.Id);
 	});
 }
 
@@ -439,7 +445,7 @@ void UGFCWalletScreen::HandleAddWallet()
 			A->RememberWallet(W.Id, W.Name);
 		}
 		if (WeakThis->AddWalletIdBox) WeakThis->AddWalletIdBox->SetText(FText::GetEmpty());
-		WeakThis->RebuildPicker(W.Id);
+		WeakThis->OnWalletsChanged(W.Id);
 	});
 }
 

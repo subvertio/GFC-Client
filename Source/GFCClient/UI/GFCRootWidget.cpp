@@ -483,6 +483,11 @@ void UGFCRootWidget::ShowFeedPage(uint8 Source, const FString& Query)
 void UGFCRootWidget::ShowHome()
 {
 	ShowFeedPage(uint8(EGFCFeedSource::ForYou), FString());
+	RefreshRightRail();
+}
+
+void UGFCRootWidget::RefreshRightRail()
+{
 	if (RightRail && IsWideLayout()) RightRail->Refresh();
 }
 
@@ -740,7 +745,7 @@ void UGFCRootWidget::HandleSessionChanged()
 		ShowLogin();
 	}
 	RefreshNav();
-	if (RightRail && IsWideLayout()) RightRail->Refresh();
+	RefreshRightRail();
 }
 
 #undef LOCTEXT_NAMESPACE
