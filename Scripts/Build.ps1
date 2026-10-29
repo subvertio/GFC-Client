@@ -14,6 +14,8 @@ $ErrorActionPreference = 'Stop'
 $project = Join-Path (Split-Path $PSScriptRoot -Parent) 'GFCClient.uproject'
 $build = Join-Path $EngineDir 'Engine\Build\BatchFiles\Build.bat'
 if (-not (Test-Path $build)) { throw "UnrealBuildTool not found at $build (set UE_ROOT)" }
+# Same layout and scaling as every other build
+& (Join-Path $PSScriptRoot 'CheckLayout.ps1') -Platform $(if ($Platform -eq 'Android') { 'Android' } else { 'Win64' })
 
 foreach ($t in $Targets) {
     $name = if ($t -eq 'Editor') { 'GFCClientEditor' } else { 'GFCClient' }

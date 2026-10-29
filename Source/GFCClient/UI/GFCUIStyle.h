@@ -19,10 +19,11 @@ class UWidget;
 class UWidgetTree;
 
 /**
- * The app's only theme: pure black (easy on the eyes, and black pixels are off
- * on the OLED screens most phones have, which saves battery). Every colour the
- * code-built UI uses comes from here; tune them in this one place.
- * Values are sRGB hex, as a designer would give them. See docs/ui-spec.md.
+ * The app's only theme, shared by the phone and desktop layouts: pure black (easy on
+ * the eyes, and black pixels are off on the OLED screens most phones have, which saves
+ * battery) with a sky-blue accent. Every colour the code-built UI uses comes from here;
+ * tune them in this one place. Values are sRGB hex, as a designer would give them.
+ * See docs/ui-spec.md.
  */
 struct GFCCLIENT_API FGFCTheme
 {
@@ -32,14 +33,17 @@ struct GFCCLIENT_API FGFCTheme
 	FLinearColor Border;          // #2F3336  dividers and borders
 	FLinearColor Text;            // #E7E9EA  primary text
 	FLinearColor TextSecondary;   // #71767B  secondary text
-	FLinearColor Accent;          // #3B4CCA  GFC accent (the share pages' colour), primary actions
-	FLinearColor AccentPressed;   // #2F3DA3
-	FLinearColor AccentText;      // Accent lightened for text on black (derived; #3B4CCA alone is too dark to read)
+	FLinearColor Accent;          // #1D9BF0  primary actions, links, the active tab
+	FLinearColor AccentPressed;   // #1A8CD8  primary buttons when hovered or pressed
+	FLinearColor AccentText;      // #1D9BF0  accent-coloured text (readable on black as it is)
+	FLinearColor AccentTint;      // Accent at 10%: hover behind accent-coloured icons
 	FLinearColor Success;         // #00BA7C  success, rewards, verified
 	FLinearColor Danger;          // #F4212E  errors
 	FLinearColor Warning;         // #FFAD1F  the wallet backup prompt
 	FLinearColor Gold;            // #FFC83D  GFC coins and earnings
 	FLinearColor GoldDark;        // #B07A12  a coin's rim and stamp
+	FLinearColor Like;            // #F91880  a liked post's heart
+	FLinearColor SearchFill;      // #202327  the rounded search box
 
 	float CornerRadius = 16.f;    // cards
 	float PillRadius = 24.f;      // buttons and inputs
@@ -53,6 +57,40 @@ struct GFCCLIENT_API FGFCTheme
  */
 namespace GFCUI
 {
+	/** The wide-window layout's sizes, in dp. Below Breakpoint the app uses the phone layout. */
+	namespace Desktop
+	{
+		constexpr float Breakpoint = 1000.f;     // window width for the three-column layout
+		constexpr float RightRailFrom = 1240.f;  // ...and room for the right rail too
+		constexpr float LeftRailWidth = 260.f;
+		constexpr float CenterWidth = 600.f;
+		constexpr float RightRailWidth = 350.f;
+		constexpr float Gutter = 24.f;           // between the columns
+	}
+
+	/**
+	 * Icon glyphs (Unicode, drawn with the engine's fonts: no icon assets or third-party
+	 * icon sets). Swap them here for an icon font later. Only glyphs the engine's Roboto
+	 * and DroidSansFallback actually draw: many symbols (a house, a smiley) come out as boxes.
+	 */
+	namespace Icon
+	{
+		inline const TCHAR* Home = TEXT("✦");       // four-pointed star: your feed
+		inline const TCHAR* Explore = TEXT("#");
+		inline const TCHAR* Bookmark = TEXT("☆");   // outline star
+		inline const TCHAR* Bookmarked = TEXT("★");
+		inline const TCHAR* Wallet = TEXT("¤");     // currency sign: GFC
+		inline const TCHAR* Profile = TEXT("@");
+		inline const TCHAR* Reply = TEXT("↩");
+		inline const TCHAR* Like = TEXT("♡");
+		inline const TCHAR* Liked = TEXT("♥");
+		inline const TCHAR* Views = TEXT("⊙");      // circled dot: an eye
+		inline const TCHAR* Share = TEXT("↗");
+		inline const TCHAR* Media = TEXT("⊕");
+		inline const TCHAR* Model3D = TEXT("✧");
+		inline const TCHAR* More = TEXT("•••");
+	}
+
 	// Short aliases into FGFCTheme, used throughout the screens.
 	inline const FLinearColor& Background = FGFCTheme::Get().Background;
 	inline const FLinearColor& Panel = FGFCTheme::Get().Surface;
@@ -76,6 +114,13 @@ namespace GFCUI
 
 	/** A borderless button for whole rows and cards: black, #1D1F23 when pressed. */
 	FButtonStyle FlatButtonStyle();
+	/** Transparent until hovered, then a rounded Hover fill: nav items, icon buttons. */
+	FButtonStyle GhostButtonStyle(const FLinearColor& Hover, float Radius = 24.f);
+
+	/** The GFC logo: "GFC" in white on an accent circle (the same mark as the Windows app icon). */
+	UWidget* MakeLogo(UWidgetTree* Tree, float Size = 40.f);
+	/** A rounded search box (SearchFill, accent outline when focused). */
+	UEditableTextBox* MakeSearchBox(UWidgetTree* Tree, const FText& Hint);
 
 	UEditableTextBox* MakeInput(UWidgetTree* Tree, const FText& Hint, bool bPassword = false);
 	void StyleComboBox(UComboBoxString* Combo);

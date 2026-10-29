@@ -243,8 +243,18 @@ bool FGFCJson::ParseSeed(const FString& Body, FGFCSeed& Out)
 
 bool FGFCJson::ParseFeed(const FString& Body, TArray<FGFCSeed>& Out)
 {
+	return ReadSeeds(Body, TEXT("items"), Out);
+}
+
+bool FGFCJson::ParseSearchSeeds(const FString& Body, TArray<FGFCSeed>& Out)
+{
+	return ReadSeeds(Body, TEXT("seeds"), Out);
+}
+
+bool FGFCJson::ReadSeeds(const FString& Body, const TCHAR* Field, TArray<FGFCSeed>& Out)
+{
 	TArray<TSharedPtr<FJsonValue>> Items;
-	if (!ReadItems(Body, TEXT("items"), Items))
+	if (!ReadItems(Body, Field, Items))
 	{
 		return false;
 	}
@@ -394,6 +404,57 @@ bool FGFCJson::ParseBlocks(const FString& Body, TArray<FString>& Out)
 		if (V.IsValid() && V->TryGetString(Name) && !Name.IsEmpty())
 		{
 			Out.Add(Name);
+		}
+	}
+	return true;
+}
+
+bool FGFCJson::ParseToggle(const FString& Body, FGFCToggleResult& Out)
+{
+	const TSharedPtr<FJsonObject> Obj = ParseObject(Body);
+	if (!Obj.IsValid())
+	{
+		return false;
+	}
+	if (Obj->HasField(TEXT("liked")))
+	{
+		Out.bOn = Bool(Obj, TEXT("liked"));
+		Out.Count = int32(Int(Obj, TEXT("like_count"), -1));
+		return true;
+	}
+	if (Obj->HasField(TEXT("bookmarked")))
+	{
+		Out.bOn = Bool(Obj, TEXT("bookmarked"));
+		Out.Count = -1;
+		return true;
+	}
+	return false;
+}
+
+bool FGFCJson::ParseNetworkStats(const FString& Body, FGFCNetworkStats& Out)
+{
+	const TSharedPtr<FJsonObject> Obj = ParseObject(Body);
+	const TArray<TSharedPtr<FJsonValue>>* Top = nullptr;
+	if (!Obj.IsValid() || !Obj->TryGetArrayField(TEXT("top_seeders"), Top))
+	{
+		return false;
+	}
+	Out.TotalRewardGfc = Num(Obj, TEXT("total_reward_gfc"));
+	Out.TotalTransfers = Int(Obj, TEXT("total_transfers"));
+	Out.TopEarners.Reset();
+	for (const TSharedPtr<FJsonValue>& V : *Top)
+	{
+		const TSharedPtr<FJsonObject>* E = nullptr;
+		if (V.IsValid() && V->TryGetObject(E))
+		{
+			FGFCTopEarner Earner;
+			Earner.Wallet = Str(*E, TEXT("wallet"));
+			Earner.EarnedGfc = Num(*E, TEXT("total_earned_gfc"));
+			Earner.Transfers = int32(Int(*E, TEXT("transfer_count")));
+			if (!Earner.Wallet.IsEmpty())
+			{
+				Out.TopEarners.Add(MoveTemp(Earner));
+			}
 		}
 	}
 	return true;

@@ -32,9 +32,16 @@ struct GFCAPI_API FGFCJson
 	static bool ParseVerifyStatus(const FString& Body, FGFCVerifyStatus& Out);
 	static bool ParseVerifyLink(const FString& Body, FGFCVerifyLink& Out);
 	static bool ParseBlocks(const FString& Body, TArray<FString>& Out);
+	/** GET /search: {"seeds": [...], "transactions": [...]}; only the seeds are read. */
+	static bool ParseSearchSeeds(const FString& Body, TArray<FGFCSeed>& Out);
+	/** POST /seeds/{id}/like ({"liked", "like_count"}) and /bookmark ({"bookmarked"}). */
+	static bool ParseToggle(const FString& Body, FGFCToggleResult& Out);
+	static bool ParseNetworkStats(const FString& Body, FGFCNetworkStats& Out);
 	static void ReadRepost(const TSharedPtr<FJsonObject>& Obj, FGFCRepostInfo& Out);
 
 	static void ReadSeed(const TSharedPtr<FJsonObject>& Obj, FGFCSeed& Out);
+	/** An array of seeds under Field; seeds without an id are dropped. */
+	static bool ReadSeeds(const FString& Body, const TCHAR* Field, TArray<FGFCSeed>& Out);
 	static void ReadTransaction(const TSharedPtr<FJsonObject>& Obj, FGFCTransaction& Out);
 
 	/**

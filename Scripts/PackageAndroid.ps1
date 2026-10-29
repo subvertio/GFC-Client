@@ -57,6 +57,9 @@ if ($missing.Count) {
 }
 if ((Get-PSDrive C).Free / 1GB -lt 30) { throw 'Less than 30 GB free on C:. Free some space first.' }
 
+# Same layout and scaling as every other build, and the improved keyboard (no white text box).
+& (Join-Path $PSScriptRoot 'CheckLayout.ps1') -Platform Android
+
 # Release signing: Unreal reads the key from Build\Android and its settings from the Android platform ini.
 $signingIni = Join-Path $root 'Config\Android\AndroidEngine.ini'
 $keyCopy = Join-Path $root 'Build\Android\gfc-release.keystore'

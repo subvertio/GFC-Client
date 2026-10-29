@@ -98,6 +98,18 @@ public:
 	void GetFeed(TCallback<TArray<FGFCSeed>> Done);
 	void GetSeed(const FString& SeedId, TCallback<FGFCSeed> Done);
 	void GetShareInfo(const FString& SeedId, TCallback<FGFCShareInfo> Done);
+	/** Seeds whose title, text, tags or creator match every word of Query (most liked first). */
+	void SearchSeeds(const FString& Query, TCallback<TArray<FGFCSeed>> Done);
+	/** The user's bookmarked seeds, newest first (login required). */
+	void GetBookmarks(TCallback<TArray<FGFCSeed>> Done);
+	/** The user's own seeds, newest first (login required). */
+	void GetMySeeds(TCallback<TArray<FGFCSeed>> Done);
+	/** Likes or unlikes (the node toggles). The result has the new state and like count. */
+	void ToggleLike(const FString& SeedId, TCallback<FGFCToggleResult> Done);
+	/** Bookmarks or removes the bookmark (the node toggles). */
+	void ToggleBookmark(const FString& SeedId, TCallback<FGFCToggleResult> Done);
+	/** What the network paid creators for views, and the top earning wallets (public). */
+	void GetNetworkStats(TCallback<FGFCNetworkStats> Done);
 
 	/**
 	 * Reports a qualified view (see FGFCViewTracker); the node may pay the creator.

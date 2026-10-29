@@ -384,6 +384,39 @@ void UGFCApiClient::CreateVerifyLink(TCallback<FGFCVerifyLink> Done)
 		MoveTemp(Done));
 }
 
+void UGFCApiClient::SearchSeeds(const FString& Query, TCallback<TArray<FGFCSeed>> Done)
+{
+	Call<TArray<FGFCSeed>>(TEXT("GET"), FGFCUrl::WithQuery(TEXT("/search"), {{TEXT("q"), Query}}), FString(), FString(),
+		!Token.IsEmpty(), &FGFCJson::ParseSearchSeeds, MoveTemp(Done));
+}
+
+void UGFCApiClient::GetBookmarks(TCallback<TArray<FGFCSeed>> Done)
+{
+	Call<TArray<FGFCSeed>>(TEXT("GET"), TEXT("/bookmarks"), FString(), FString(), true, &FGFCJson::ParseFeed, MoveTemp(Done));
+}
+
+void UGFCApiClient::GetMySeeds(TCallback<TArray<FGFCSeed>> Done)
+{
+	Call<TArray<FGFCSeed>>(TEXT("GET"), TEXT("/seeds/mine"), FString(), FString(), true, &FGFCJson::ParseFeed, MoveTemp(Done));
+}
+
+void UGFCApiClient::ToggleLike(const FString& SeedId, TCallback<FGFCToggleResult> Done)
+{
+	Call<FGFCToggleResult>(TEXT("POST"), TEXT("/seeds/") + FGFCUrl::Encode(SeedId) + TEXT("/like"), FormContentType, FString(), true,
+		&FGFCJson::ParseToggle, MoveTemp(Done));
+}
+
+void UGFCApiClient::ToggleBookmark(const FString& SeedId, TCallback<FGFCToggleResult> Done)
+{
+	Call<FGFCToggleResult>(TEXT("POST"), TEXT("/seeds/") + FGFCUrl::Encode(SeedId) + TEXT("/bookmark"), FormContentType, FString(), true,
+		&FGFCJson::ParseToggle, MoveTemp(Done));
+}
+
+void UGFCApiClient::GetNetworkStats(TCallback<FGFCNetworkStats> Done)
+{
+	Call<FGFCNetworkStats>(TEXT("GET"), TEXT("/podt/stats"), FString(), FString(), false, &FGFCJson::ParseNetworkStats, MoveTemp(Done));
+}
+
 void UGFCApiClient::ReportSeed(const FString& SeedId, const FString& Reason, TFunction<void(const FGFCApiResult&)> Done)
 {
 	TWeakObjectPtr<UGFCApiClient> WeakThis(this);

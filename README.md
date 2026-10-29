@@ -47,6 +47,23 @@ This builds **GFCClientEditor** and **GFCClient** (Development, Win64) with
 UnrealBuildTool. Use `-Targets Editor` for the editor only. If the compiler
 runs out of memory (C3859 / C1076), lower parallelism: `-Jobs 4`.
 
+### Same interface on every build
+
+The layout sizes itself to the screen: `UGFCDPIScalingRule` scales by the screen's shortest
+side on phones, so a 1080 px wide phone and a 720 px one show the same layout, just sharper or
+softer. A build looks the same as everyone else's as long as it comes from the current branch and
+these settings in `Config\DefaultEngine.ini` are unchanged:
+
+- `[/Script/Engine.UserInterfaceSettings]`: `UIScaleRule=Custom`,
+  `CustomScalingRuleClass=/Script/GFCClient.GFCDPIScalingRule` and the `UIScaleCurve`;
+- `[/Script/AndroidRuntimeSettings.AndroidRuntimeSettings]`: `bEnableNewKeyboard=True`
+  (otherwise every text field opens a full-screen white box on Android).
+
+`Build.ps1` and `PackageAndroid.ps1` run `Scripts\CheckLayout.ps1` first and stop if any of
+this is different, including an override in `Saved\Config` left by the editor, or a checkout
+from before the layout existed. Don't change these in the editor's Project Settings; if the
+scale has to change, change the curve in both `DefaultEngine.ini` and `CheckLayout.ps1`.
+
 The viewer material is generated from a script, so there's nothing to author by hand:
 
 ```powershell
