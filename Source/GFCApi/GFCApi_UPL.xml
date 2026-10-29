@@ -384,6 +384,17 @@
 	<gameActivityOnCreateAdditions>
 		<insert><![CDATA[
 		gfcHandleIntent(getIntent(), false);
+
+		// Unreal's new keyboard puts a white EditText strip above the keyboard (createVirtualKeyboardInput).
+		// It must stay - it receives the typing and passes it to the app's text boxes, which show it -
+		// so make it invisible instead of painting a white bar over the interface.
+		if (newVirtualKeyboardInput != null)
+		{
+			newVirtualKeyboardInput.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+			newVirtualKeyboardInput.setTextColor(android.graphics.Color.TRANSPARENT);
+			newVirtualKeyboardInput.setHighlightColor(android.graphics.Color.TRANSPARENT);
+			newVirtualKeyboardInput.setCursorVisible(false);
+		}
 		]]></insert>
 	</gameActivityOnCreateAdditions>
 
