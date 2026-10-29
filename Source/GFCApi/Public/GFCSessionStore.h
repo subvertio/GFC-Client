@@ -46,17 +46,18 @@ public:
  * Protects secrets at rest as well as the platform allows.
  *
  * - Windows: DPAPI (CryptProtectData), bound to the current Windows user.
- * - Android: TODO(android-keystore): wrap with an AES key held in the Android
- *   Keystore (via JNI / UPL, KeyGenParameterSpec with PURPOSE_ENCRYPT|DECRYPT),
- *   or use EncryptedSharedPreferences. Until then the token is stored as plain
- *   bytes in the app's private storage, which other apps can't read on a
- *   non-rooted device, and a warning is logged.
- * - Other platforms: plain bytes, with the same warning.
+ * - Android: AES-256-GCM with a key generated inside the Android Keystore that never
+ *   leaves it (GFCApi_UPL.xml). A copied save file (backup, device transfer, rooted
+ *   phone) can't be decrypted elsewhere; the user just logs in again.
+ * - Other platforms: plain bytes, with a warning.
  */
 struct GFCAPI_API FGFCSecureStore
 {
 	static bool Protect(const FString& Secret, TArray<uint8>& OutBlob);
 	static bool Unprotect(const TArray<uint8>& Blob, FString& OutSecret);
+
+	/** True for a blob saved in plain form by an older build, which should be saved again protected. */
+	static bool NeedsUpgrade(const TArray<uint8>& Blob);
 
 	/** True when Protect uses real OS protection rather than plain storage. */
 	static bool IsHardwareOrOsBacked();

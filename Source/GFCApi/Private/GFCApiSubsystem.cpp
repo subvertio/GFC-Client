@@ -50,6 +50,10 @@ void UGFCApiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		bRestoring = true;
 		Client->SetSession(Save->Username, Token);
 		bRestoring = false;
+		if (FGFCSecureStore::NeedsUpgrade(Save->ProtectedToken))
+		{
+			Persist();  // a token an older build saved in plain form: save it again, protected
+		}
 	}
 
 	Client->OnSessionChanged.AddUObject(this, &UGFCApiSubsystem::HandleClientSessionChanged);
