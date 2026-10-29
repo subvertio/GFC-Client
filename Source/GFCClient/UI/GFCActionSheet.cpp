@@ -12,6 +12,7 @@
 #include "Engine/World.h"
 #include "GFCApiClient.h"
 #include "GFCApiSubsystem.h"
+#include "UI/GFCPostEditor.h"
 #include "UI/GFCRootWidget.h"
 #include "UI/GFCUIStyle.h"
 
@@ -179,6 +180,30 @@ namespace
 	}
 }
 
+void GFCShowOwnPostActions(UObject* WorldContext, const FGFCSeed& Seed)
+{
+	TArray<FText> Options = {LOCTEXT("Edit", "Edit post")};
+	if (!Seed.EditedAt.IsEmpty()) Options.Add(LOCTEXT("History", "Edit history"));
+	TWeakObjectPtr<UObject> WeakCtx(WorldContext);
+	UGFCActionSheet::Show(WorldContext, FText::GetEmpty(), Options, [WeakCtx, Seed](int32 Choice)
+	{
+		if (!WeakCtx.IsValid()) return;
+		if (Choice == 0)
+		{
+			UGFCPostPanel::ShowEditor(WeakCtx.Get(), Seed, [WeakCtx](const FGFCSeed& Updated)
+			{
+				if (!WeakCtx.IsValid()) return;
+				if (UGFCRootWidget* Root = UGFCRootWidget::Find(WeakCtx.Get())) Root->OnPostEdited(Updated);
+				Toast(WeakCtx.Get(), LOCTEXT("Saved", "Post updated."));
+			});
+		}
+		else if (Choice == 1)
+		{
+			UGFCPostPanel::ShowHistory(WeakCtx.Get(), Seed);
+		}
+	});
+}
+
 void GFCShowPostActions(UObject* WorldContext, const FGFCSeed& Seed, TFunction<void()> OnHidden)
 {
 	UWorld* World = WorldContext ? WorldContext->GetWorld() : nullptr;
@@ -194,7 +219,7 @@ void GFCShowPostActions(UObject* WorldContext, const FGFCSeed& Seed, TFunction<v
 	}
 	if (Seed.Owner.Equals(C->GetUsername(), ESearchCase::IgnoreCase))
 	{
-		Toast(WorldContext, LOCTEXT("Yours", "This is your post."));
+		GFCShowOwnPostActions(WorldContext, Seed);
 		return;
 	}
 

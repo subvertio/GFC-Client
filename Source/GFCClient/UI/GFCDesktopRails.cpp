@@ -404,6 +404,8 @@ void UGFCRightRail::RefreshEarners()
 		UWidgetTree* T = WeakThis->WidgetTree;
 		const FGFCTheme& Th = FGFCTheme::Get();
 		WeakThis->EarnersList->ClearChildren();
+		WeakThis->EarnerLinks.Reset();
+		WeakThis->EarnerOwners.Reset();
 		if (!R.bOk)
 		{
 			WeakThis->EarnersNote->SetText(LOCTEXT("NoStats", "Earnings aren't available from this node."));
@@ -423,7 +425,7 @@ void UGFCRightRail::RefreshEarners()
 			NBox->AddChild(N);
 			AddH(Row, NBox, 6.f);
 			UVerticalBox* Who = MakeColumn(T);
-			UTextBlock* Wallet = MakeText(T, FText::FromString(ShortId(E.Wallet)), 15, Th.Text, true);
+			UTextBlock* Wallet = MakeText(T, FText::FromString(EarnerName(E)), 15, Th.Text, true);
 			Wallet->SetAutoWrapText(false);
 			Wallet->SetToolTipText(FText::FromString(E.Wallet));
 			AddV(Who, Wallet, 0.f);
@@ -432,13 +434,44 @@ void UGFCRightRail::RefreshEarners()
 			UTextBlock* Amount = MakeText(T, FText::Format(LOCTEXT("Plus", "+{0}"), Gfc(E.EarnedGfc)), 14, Th.Gold, true);
 			Amount->SetAutoWrapText(false);
 			AddH(Row, Amount, 0.f);
-			AddV(WeakThis->EarnersList, Row, 12.f);
+			if (E.Owner.IsEmpty())
+			{
+				AddV(WeakThis->EarnersList, Row, 12.f); // an older node's unnamed wallet: nothing to open
+				continue;
+			}
+			// A named account: the whole row opens their posts.
+			UButton* B = T->ConstructWidget<UButton>();
+			B->SetStyle(GhostButtonStyle(Th.SurfacePressed, 8.f));
+			B->SetToolTipText(FText::Format(LOCTEXT("SeePosts", "See @{0}'s posts\n{1}"), FText::FromString(E.Owner), FText::FromString(E.Wallet)));
+			B->AddChild(Row);
+			if (UButtonSlot* BS = Cast<UButtonSlot>(Row->Slot))
+			{
+				BS->SetPadding(FMargin(4.f, 4.f));
+				BS->SetHorizontalAlignment(HAlign_Fill);
+			}
+			UGFCRailLink* Link = NewObject<UGFCRailLink>(WeakThis.Get());
+			Link->Index = WeakThis->EarnerOwners.Add(E.Owner);
+			Link->OnClick = [WeakThis](int32 Index)
+			{
+				if (WeakThis.IsValid() && WeakThis->Root.IsValid() && WeakThis->EarnerOwners.IsValidIndex(Index))
+				{
+					WeakThis->Root->ShowUser(WeakThis->EarnerOwners[Index]);
+				}
+			};
+			WeakThis->EarnerLinks.Add(Link);
+			B->OnClicked.AddDynamic(Link, &UGFCRailLink::Clicked);
+			AddV(WeakThis->EarnersList, B, 8.f);
 		}
 		if (Rank == 0)
 		{
 			AddV(WeakThis->EarnersList, MakeText(T, LOCTEXT("NoEarners", "No paid views yet."), 14, Th.TextSecondary), 4.f);
 		}
 	});
+}
+
+FString UGFCRightRail::EarnerName(const FGFCTopEarner& Earner)
+{
+	return Earner.Owner.IsEmpty() ? ShortId(Earner.Wallet) : TEXT("@") + Earner.Owner;
 }
 
 TArray<FGFCSeed> UGFCRightRail::RankTrending(const TArray<FGFCSeed>& Feed, int32 Max)

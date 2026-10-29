@@ -107,6 +107,22 @@ namespace GFCUI
 		return S;
 	}
 
+	UButton* MakeTextLink(UWidgetTree* Tree, const FText& Label, int32 Size)
+	{
+		const FGFCTheme& Th = FGFCTheme::Get();
+		UButton* B = Tree->ConstructWidget<UButton>();
+		B->SetStyle(GhostButtonStyle(Th.SurfacePressed, 6.f));
+		B->SetTouchMethod(EButtonTouchMethod::PreciseTap); // a small target: never taps the post by accident
+		UTextBlock* T = MakeText(Tree, Label, Size, Th.TextSecondary);
+		T->SetAutoWrapText(false);
+		B->AddChild(T);
+		if (UButtonSlot* S = Cast<UButtonSlot>(T->Slot))
+		{
+			S->SetPadding(FMargin(4.f, 0.f));
+		}
+		return B;
+	}
+
 	UWidget* MakeLogo(UWidgetTree* Tree, float Size)
 	{
 		const FGFCTheme& Th = FGFCTheme::Get();

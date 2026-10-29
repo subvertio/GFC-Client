@@ -40,6 +40,12 @@ struct GFCAPI_API FGFCJson
 	/** POST /seeds/{id}/like ({"liked", "like_count"}) and /bookmark ({"bookmarked"}). */
 	static bool ParseToggle(const FString& Body, FGFCToggleResult& Out);
 	static bool ParseNetworkStats(const FString& Body, FGFCNetworkStats& Out);
+	/** GET /health: {"status", ..., "network", "phone_required_to_post"}. */
+	static bool ParseHealth(const FString& Body, FGFCNodeHealth& Out);
+	/** POST /seeds/{id}/edit: {"ok", "id", "title", "description", "tags", "edited_at", "synced"}. */
+	static bool ParseSeedEditResult(const FString& Body, FGFCSeedEdit& Out);
+	/** GET /seeds/{id}/edits: {"edits": [...]}, newest first. */
+	static bool ParseSeedEdits(const FString& Body, TArray<FGFCSeedEdit>& Out);
 	static void ReadRepost(const TSharedPtr<FJsonObject>& Obj, FGFCRepostInfo& Out);
 
 	static void ReadSeed(const TSharedPtr<FJsonObject>& Obj, FGFCSeed& Out);

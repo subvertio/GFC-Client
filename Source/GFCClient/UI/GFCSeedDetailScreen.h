@@ -64,6 +64,9 @@ public:
 
 	EGFCDetailState GetState() const { return State; }
 
+	/** The poster edited this post: new title, text and tags, without reloading what's playing or shown. */
+	void ApplyEdit(const FGFCSeed& Updated);
+
 	/**
 	 * Future opt-in: keep a bookmarked seed's file for offline viewing (tied to
 	 * POST /seeds/{id}/bookmark). Not built: everything is session-only for now.
@@ -87,7 +90,7 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> OpenMediaButton;
 	/** Thumbnail, then the full image or video. */
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UImage> PreviewImage;
-	/** "•••": report the post or block its creator. */
+	/** "•••": report the post or block its creator, or edit your own post. */
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> MoreButton;
 	/** The preview area and its button; collapsed for text posts, which are all text. */
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UWidget> PreviewFrame;
@@ -97,6 +100,8 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UGFCModelView> ModelView;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> PreviewNote;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> OwnerText;
+	/** "Edited", after the time, when the poster changed the post; opens the edit history. */
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> EditedButton;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> DescriptionText;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> MetaText;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> ShareLinkText;
@@ -108,6 +113,7 @@ private:
 	UFUNCTION() void HandleOpenMedia();
 	UFUNCTION() void HandlePrimary();
 	UFUNCTION() void HandleMore();
+	UFUNCTION() void HandleEdited();
 
 	void Render();
 	void SetState(EGFCDetailState NewState, const FText& Note = FText::GetEmpty());

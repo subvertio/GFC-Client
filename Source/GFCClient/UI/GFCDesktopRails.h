@@ -103,6 +103,8 @@ public:
 
 	/** The trending order: likes, then GFC earned, then views (ties keep the feed's order). At most Max. */
 	static TArray<FGFCSeed> RankTrending(const TArray<FGFCSeed>& Feed, int32 Max = 5);
+	/** Top earners: "@owner" when the node confirmed the account, else the shortened wallet ID. */
+	static FString EarnerName(const FGFCTopEarner& Earner);
 
 protected:
 	virtual void NativeOnInitialized() override;
@@ -130,4 +132,7 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UVerticalBox> EarnersList;
 	UPROPERTY(Transient) TObjectPtr<UTextBlock> NodeText;
 	UPROPERTY(Transient) TArray<TObjectPtr<UGFCRailLink>> TrendingLinks;
+	/** Top earner rows: tapping one opens that account's posts. */
+	UPROPERTY(Transient) TArray<TObjectPtr<UGFCRailLink>> EarnerLinks;
+	TArray<FString> EarnerOwners;
 };

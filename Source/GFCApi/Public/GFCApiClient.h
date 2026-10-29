@@ -104,12 +104,28 @@ public:
 	void GetBookmarks(TCallback<TArray<FGFCSeed>> Done);
 	/** The user's own seeds, newest first (login required). */
 	void GetMySeeds(TCallback<TArray<FGFCSeed>> Done);
+	/** Another account's posts, newest first (public; logged in, items carry liked/bookmarked). */
+	void GetUserSeeds(const FString& Name, TCallback<TArray<FGFCSeed>> Done);
+	/** Another account's public profile: name, bio, avatar, joined. */
+	void GetUserProfile(const FString& Name, TCallback<FGFCProfile> Done);
+	/** The node's network and posting rule (GET /health). Asked once per node, then remembered. */
+	void GetNodeHealth(TCallback<FGFCNodeHealth> Done);
 	/** Likes or unlikes (the node toggles). The result has the new state and like count. */
 	void ToggleLike(const FString& SeedId, TCallback<FGFCToggleResult> Done);
 	/** Bookmarks or removes the bookmark (the node toggles). */
 	void ToggleBookmark(const FString& SeedId, TCallback<FGFCToggleResult> Done);
 	/** What the network paid creators for views, and the top earning wallets (public). */
 	void GetNetworkStats(TCallback<FGFCNetworkStats> Done);
+	/**
+	 * Changes the title, text or tags of the user's own post (post scope). On failure R.Error is the
+	 * node's message: "nothing changed", too long, not your post (403), hidden (410)...
+	 */
+	void EditSeed(const FString& SeedId, const FGFCSeedEditRequest& Edit, TCallback<FGFCSeedEdit> Done);
+	/** Every version of a post's title, text and tags, newest first (public). */
+	void GetSeedEdits(const FString& SeedId, TCallback<TArray<FGFCSeedEdit>> Done);
+	/** The node's tags field: comma-separated, trimmed, empties dropped. */
+	static FString JoinTags(const TArray<FString>& Tags);
+	static TArray<FString> SplitTags(const FString& Text);
 
 	/**
 	 * Reports a qualified view (see FGFCViewTracker); the node may pay the creator.
@@ -247,4 +263,6 @@ private:
 	TSet<FString> BlockedUsers;
 	TSet<FString> ReportedSeeds;
 	TOptional<bool> LastKnownVerified;
+	TOptional<FGFCNodeHealth> CachedHealth;
+	FString CachedHealthUrl;
 };

@@ -60,6 +60,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "GFC|Navigation") void ShowBookmarks();
 	/** The user's own posts. */
 	UFUNCTION(BlueprintCallable, Category = "GFC|Navigation") void ShowProfile();
+	/** Another account's posts (e.g. a tapped top earner); your own name opens your profile. Shows at once, then fills in. */
+	UFUNCTION(BlueprintCallable, Category = "GFC|Navigation") void ShowUser(const FString& Username);
 	UFUNCTION(BlueprintCallable, Category = "GFC") void Logout();
 
 	/** From the desktop composer: opens the create screen with Body, then the picker or the upload. */
@@ -88,9 +90,18 @@ public:
 
 	/** A post was reported or its creator blocked: off the feed, and off screen if it's open. */
 	void OnPostHidden(const FString& SeedId);
+	/** The poster edited a post: its feed cards and the open post screen show the new text in place. */
+	void OnPostEdited(const FGFCSeed& Updated);
 
 	/** Opens the node's phone verification page in the browser; the balance is checked on return. */
 	void StartPhoneVerification();
+	/**
+	 * Runs Then when the user may post. On the real network (GET /health phone_required_to_post) an
+	 * unverified account is offered phone verification instead, before writing anything.
+	 */
+	void WhenAllowedToPost(TFunction<void()> Then);
+	/** "Verify my phone" sheet with Why above it; opens the verification page. */
+	void OfferPhoneVerification(const FText& Why);
 
 	/**
 	 * A recovery code the user hasn't confirmed saving yet (from registering, or a new one from the

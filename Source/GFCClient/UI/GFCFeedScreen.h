@@ -22,6 +22,7 @@ enum class EGFCFeedSource : uint8
 	Explore,    // GET /search?q=..., or the most liked posts when there's no query
 	Bookmarks,  // GET /bookmarks
 	Mine,       // GET /seeds/mine (the profile)
+	User,       // GET /users/{name}/seeds: another account's posts (the query is the username)
 };
 
 /** Seed list, newest first. See docs/ui-spec.md#feed. */
@@ -98,6 +99,8 @@ private:
 public:
 	/** Drops posts the user just reported or whose creator they blocked, without reloading. */
 	void RemoveHidden();
+	/** Shows an edited post's new title, text and tags on its cards, without reloading. */
+	void ApplyEdit(const FGFCSeed& Updated);
 private:
 
 	/** Releases cards that have been off screen longer than the grace period; restores cards coming back. */
@@ -107,6 +110,8 @@ private:
 	bool bWide = false;
 	EGFCFeedSource Source = EGFCFeedSource::ForYou;
 	FString Query;
+	/** User pages: the account's profile, for the header (empty until it loads). */
+	FGFCProfile UserProfile;
 	/** Bumped on every source change, so a late answer for the previous page is dropped. */
 	uint32 LoadSerial = 0;
 	TMap<TWeakObjectPtr<UGFCSeedCard>, float> OffscreenSeconds;

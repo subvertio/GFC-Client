@@ -34,6 +34,7 @@
 #include "Components/Spacer.h"
 #include "UI/GFCActionSheet.h"
 #include "UI/GFCMusicWidgets.h"
+#include "UI/GFCPostEditor.h"
 #include "UI/GFCRootWidget.h"
 #include "UI/GFCSeedCard.h"
 #include "UI/GFCUIStyle.h"
@@ -147,7 +148,11 @@ void UGFCSeedDetailScreen::BuildDefaultLayout()
 	MetaText = MakeText(T, FText::GetEmpty(), 12, TextDim);
 	DescriptionText = MakeText(T, FText::GetEmpty(), 15, Text);
 	AddV(Col, TitleText, 4.f);
-	AddV(Col, OwnerText, 8.f);
+	UHorizontalBox* OwnerRow = MakeRow(T);
+	AddH(OwnerRow, OwnerText, 4.f);
+	EditedButton = MakeTextLink(T, LOCTEXT("Edited", "· Edited"), 14);
+	AddH(OwnerRow, EditedButton, 0.f);
+	AddV(Col, OwnerRow, 8.f);
 	AddV(Col, MetaText, 12.f);
 	AddV(Col, DescriptionText, 20.f);
 
@@ -171,6 +176,7 @@ void UGFCSeedDetailScreen::BindEvents()
 	if (OpenMediaButton) OpenMediaButton->OnClicked.AddDynamic(this, &ThisClass::HandleOpenMedia);
 	if (PrimaryButton) PrimaryButton->OnClicked.AddDynamic(this, &ThisClass::HandlePrimary);
 	if (MoreButton) MoreButton->OnClicked.AddDynamic(this, &ThisClass::HandleMore);
+	if (EditedButton) EditedButton->OnClicked.AddDynamic(this, &ThisClass::HandleEdited);
 	if (ModelView)
 	{
 		TWeakObjectPtr<UGFCSeedDetailScreen> WeakThis(this);
@@ -261,7 +267,13 @@ void UGFCSeedDetailScreen::Render()
 {
 	const EGFCMediaKind Kind = Seed.GetMediaKind();
 	if (TitleText) TitleText->SetText(FText::FromString(Seed.Title));
-	if (OwnerText) OwnerText->SetText(FText::Format(LOCTEXT("By", "by {0}"), FText::FromString(Seed.Owner)));
+	if (OwnerText)
+	{
+		const FText When = RelativeTime(Seed.CreatedAt);
+		OwnerText->SetText(When.IsEmpty() ? FText::Format(LOCTEXT("By", "by {0}"), FText::FromString(Seed.Owner))
+			: FText::Format(LOCTEXT("ByWhen", "by {0} · {1}"), FText::FromString(Seed.Owner), When));
+	}
+	if (EditedButton) EditedButton->SetVisibility(Seed.EditedAt.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
 	if (DescriptionText)
 	{
 		DescriptionText->SetText(Seed.Description.IsEmpty() ? LOCTEXT("NoDesc", "No description.") : FText::FromString(Seed.Description));
@@ -369,6 +381,20 @@ void UGFCSeedDetailScreen::HandleMore()
 	{
 		if (WeakThis.IsValid() && WeakThis->Root.IsValid()) WeakThis->Root->OnPostHidden(Id);
 	});
+}
+
+void UGFCSeedDetailScreen::HandleEdited()
+{
+	UGFCPostPanel::ShowHistory(this, Seed);
+}
+
+void UGFCSeedDetailScreen::ApplyEdit(const FGFCSeed& Updated)
+{
+	Seed.Title = Updated.Title;
+	Seed.Description = Updated.Description;
+	Seed.Tags = Updated.Tags;
+	Seed.EditedAt = Updated.EditedAt;
+	Render();
 }
 
 void UGFCSeedDetailScreen::HandlePrimary()
