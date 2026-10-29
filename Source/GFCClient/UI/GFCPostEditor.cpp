@@ -344,3 +344,9 @@ void UGFCPostPanel::HandleClose()
 }
 
 #undef LOCTEXT_NAMESPACE
+
+void UGFCPostPanel::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
+	KeyboardScroll.Tick(WidgetTree, MyGeometry);
+}

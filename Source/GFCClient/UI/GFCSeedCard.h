@@ -79,6 +79,9 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> HandleText;
 	/** Holds the avatar (an initial in a circle until profile images are loaded). */
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<USizeBox> AvatarSlot;
+	/** Around the avatar, and around the name and handle: both open the poster's page. */
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> AvatarButton;
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> AuthorButton;
 	/** "Repost of @original": shown when the node matched this post to an earlier original. */
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> RepostText;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> MoreButton;
@@ -115,6 +118,7 @@ private:
 	UFUNCTION() void HandleSoundClicked();
 	UFUNCTION() void HandleMoreClicked();
 	UFUNCTION() void HandleEditedClicked();
+	UFUNCTION() void HandleAuthorClicked();
 	UFUNCTION() void HandleLike();
 	UFUNCTION() void HandleBookmark();
 	UFUNCTION() void HandleShare();

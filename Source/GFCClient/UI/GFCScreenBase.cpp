@@ -28,6 +28,12 @@ void UGFCScreenBase::NativeOnInitialized()
 	}
 }
 
+void UGFCScreenBase::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
+	KeyboardScroll.Tick(WidgetTree, MyGeometry);
+}
+
 void UGFCScreenBase::OnScreenShown()
 {
 	// Screens open at the top, and don't jump around when an input takes focus.

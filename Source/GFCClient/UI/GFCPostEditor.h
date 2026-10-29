@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "GFCApiTypes.h"
+#include "UI/GFCKeyboardScroll.h"
 #include "GFCPostEditor.generated.h"
 
 class UButton;
@@ -44,8 +45,11 @@ public:
 protected:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeDestruct() override;
+	/** Keeps the field you're typing in above the on-screen keyboard. */
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
 private:
+	FGFCKeyboardScroll KeyboardScroll;
 	static UGFCPostPanel* Open(UObject* WorldContext, const FGFCSeed& Seed);
 	void BuildEditor();
 	void BuildHistory();

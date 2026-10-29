@@ -95,6 +95,8 @@ void UGFCSeedCard::NativeOnInitialized()
 	if (SoundButton) SoundButton->OnClicked.AddDynamic(this, &ThisClass::HandleSoundClicked);
 	if (MoreButton) MoreButton->OnClicked.AddDynamic(this, &ThisClass::HandleMoreClicked);
 	if (EditedButton) EditedButton->OnClicked.AddDynamic(this, &ThisClass::HandleEditedClicked);
+	if (AvatarButton) AvatarButton->OnClicked.AddDynamic(this, &ThisClass::HandleAuthorClicked);
+	if (AuthorButton) AuthorButton->OnClicked.AddDynamic(this, &ThisClass::HandleAuthorClicked);
 	if (ReplyButton) ReplyButton->OnClicked.AddDynamic(this, &ThisClass::HandleClicked); // comments live on the post's screen
 	if (LikeButton) LikeButton->OnClicked.AddDynamic(this, &ThisClass::HandleLike);
 	if (BookmarkButton) BookmarkButton->OnClicked.AddDynamic(this, &ThisClass::HandleBookmark);
@@ -136,10 +138,16 @@ void UGFCSeedCard::BuildDefaultLayout()
 		S->SetPadding(FMargin(4.f, 12.f));
 	}
 
+	// Avatar, name and handle open the poster's page: small targets of their own, like "•••".
+	AvatarButton = T->ConstructWidget<UButton>();
+	AvatarButton->SetStyle(FlatButtonStyle());
+	AvatarButton->SetTouchMethod(EButtonTouchMethod::PreciseTap);
 	AvatarSlot = T->ConstructWidget<USizeBox>();
 	AvatarSlot->SetWidthOverride(40.f);
-	AddH(Post, AvatarSlot, 12.f);
-	if (UHorizontalBoxSlot* S = Cast<UHorizontalBoxSlot>(AvatarSlot->Slot))
+	AvatarButton->AddChild(AvatarSlot);
+	if (UButtonSlot* S = Cast<UButtonSlot>(AvatarSlot->Slot)) S->SetPadding(FMargin(0.f));
+	AddH(Post, AvatarButton, 12.f);
+	if (UHorizontalBoxSlot* S = Cast<UHorizontalBoxSlot>(AvatarButton->Slot))
 	{
 		S->SetVerticalAlignment(VAlign_Top);
 	}
@@ -152,8 +160,15 @@ void UGFCSeedCard::BuildDefaultLayout()
 	OwnerText->SetAutoWrapText(false);
 	HandleText = MakeText(T, FText::GetEmpty(), 14, TextDim);
 	HandleText->SetAutoWrapText(false);
-	AddH(Header, OwnerText, 6.f);
-	AddH(Header, HandleText, 2.f);
+	AuthorButton = T->ConstructWidget<UButton>();
+	AuthorButton->SetStyle(FlatButtonStyle());
+	AuthorButton->SetTouchMethod(EButtonTouchMethod::PreciseTap);
+	UHorizontalBox* Author = MakeRow(T);
+	AuthorButton->AddChild(Author);
+	if (UButtonSlot* S = Cast<UButtonSlot>(Author->Slot)) S->SetPadding(FMargin(0.f));
+	AddH(Author, OwnerText, 6.f);
+	AddH(Author, HandleText, 2.f);
+	AddH(Header, AuthorButton, 0.f);
 	// "· Edited" right after the time: its own small target, opening the edit history.
 	EditedButton = MakeTextLink(T, LOCTEXT("Edited", "· Edited"), 14);
 	AddH(Header, EditedButton, 0.f);
@@ -604,6 +619,13 @@ void UGFCSeedCard::HandleMoreClicked()
 void UGFCSeedCard::HandleEditedClicked()
 {
 	UGFCPostPanel::ShowHistory(this, Seed);
+}
+
+void UGFCSeedCard::HandleAuthorClicked()
+{
+	// The poster's page: their posts, newest first (your own name opens your profile)
+	if (Seed.Owner.IsEmpty()) return;
+	if (UGFCRootWidget* Root = UGFCRootWidget::Find(this)) Root->ShowUser(Seed.Owner);
 }
 
 void UGFCSeedCard::HandleSoundClicked()
