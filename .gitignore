@@ -40,3 +40,6 @@ Packaged/
 
 # Written by PackageAndroid.ps1 -Release for one build (holds the key password), then deleted
 Config/Android/AndroidEngine.ini
+
+# Python bytecode from Scripts/*.py
+__pycache__/
