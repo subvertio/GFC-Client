@@ -14,7 +14,7 @@
     No CAMERA permission is declared (the camera app holds it). WRITE_EXTERNAL_STORAGE is
     declared only up to Android 9 and requested only when the user taps Photo or Video.
 
-  Not yet built on a device: Android tooling isn't installed on the dev machine yet.
+  - Session token at rest: AES-GCM with an Android Keystore key (FGFCSecureStore); app data backup off.
 -->
 <root xmlns:android="http://schemas.android.com/apk/res/android">
 	<init>
@@ -23,6 +23,10 @@
 
 	<androidManifestUpdates>
 		<addPermission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>
+		<!-- No Android backups of app data (the session save, the media cache). The token is
+		     Keystore-encrypted anyway, so a device-to-device copy can't be read either. -->
+		<addAttribute tag="application" name="android:allowBackup" value="false"/>
+		<addAttribute tag="application" name="android:fullBackupContent" value="false"/>
 		<!-- GameActivity: App Link + gfc:// filters, and singleTask so a link tapped while the app runs reaches onNewIntent. -->
 		<loopElements tag="activity">
 			<setStringFromAttribute result="activityName" tag="$" name="android:name"/>
@@ -288,6 +292,87 @@
 	}
 
 	/** The app's private cache folder; the OS may clear it when storage runs low. */
+	// ---- GFC session token at rest (FGFCSecureStore) ----
+	// AES-256-GCM with a key generated inside the Android Keystore; the key never leaves it,
+	// so a copied save file can't be decrypted on another device or outside this app.
+	// Blob: [IV length][IV][ciphertext+tag], Base64. Failures return "" (the user logs in again).
+	private static final String GFC_TOKEN_KEY = "gfc_session_v1";
+	private static final byte[] GFC_TOKEN_AAD = "GFC-Client/session-token/v1".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+
+	private javax.crypto.SecretKey gfcTokenKey(boolean create) throws Exception
+	{
+		java.security.KeyStore ks = java.security.KeyStore.getInstance("AndroidKeyStore");
+		ks.load(null);
+		java.security.Key key = ks.getKey(GFC_TOKEN_KEY, null);
+		if (key instanceof javax.crypto.SecretKey)
+		{
+			return (javax.crypto.SecretKey)key;
+		}
+		if (!create)
+		{
+			return null;
+		}
+		javax.crypto.KeyGenerator gen = javax.crypto.KeyGenerator.getInstance(
+			android.security.keystore.KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore");
+		gen.init(new android.security.keystore.KeyGenParameterSpec.Builder(GFC_TOKEN_KEY,
+				android.security.keystore.KeyProperties.PURPOSE_ENCRYPT | android.security.keystore.KeyProperties.PURPOSE_DECRYPT)
+			.setBlockModes(android.security.keystore.KeyProperties.BLOCK_MODE_GCM)
+			.setEncryptionPaddings(android.security.keystore.KeyProperties.ENCRYPTION_PADDING_NONE)
+			.setKeySize(256)
+			.build());
+		return gen.generateKey();
+	}
+
+	public String AndroidThunkJava_GFCProtect(String plain)
+	{
+		try
+		{
+			javax.crypto.Cipher c = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");
+			c.init(javax.crypto.Cipher.ENCRYPT_MODE, gfcTokenKey(true));  // the Keystore picks a fresh IV
+			c.updateAAD(GFC_TOKEN_AAD);
+			byte[] iv = c.getIV();
+			byte[] sealed = c.doFinal(plain.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+			byte[] out = new byte[1 + iv.length + sealed.length];
+			out[0] = (byte)iv.length;
+			System.arraycopy(iv, 0, out, 1, iv.length);
+			System.arraycopy(sealed, 0, out, 1 + iv.length, sealed.length);
+			return android.util.Base64.encodeToString(out, android.util.Base64.NO_WRAP);
+		}
+		catch (Exception e)
+		{
+			android.util.Log.w("GFC", "Couldn't protect the session token: " + e.getClass().getSimpleName());
+			return "";
+		}
+	}
+
+	public String AndroidThunkJava_GFCUnprotect(String blob)
+	{
+		try
+		{
+			javax.crypto.SecretKey key = gfcTokenKey(false);
+			if (key == null)
+			{
+				return "";
+			}
+			byte[] in = android.util.Base64.decode(blob, android.util.Base64.NO_WRAP);
+			int ivLen = in.length > 0 ? (in[0] & 0xff) : 0;
+			if (ivLen < 12 || 1 + ivLen + 16 > in.length)
+			{
+				return "";
+			}
+			javax.crypto.Cipher c = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");
+			c.init(javax.crypto.Cipher.DECRYPT_MODE, key, new javax.crypto.spec.GCMParameterSpec(128, in, 1, ivLen));
+			c.updateAAD(GFC_TOKEN_AAD);
+			byte[] plain = c.doFinal(in, 1 + ivLen, in.length - 1 - ivLen);
+			return new String(plain, java.nio.charset.StandardCharsets.UTF_8);
+		}
+		catch (Exception e)
+		{
+			android.util.Log.w("GFC", "Couldn't read the saved session token: " + e.getClass().getSimpleName());
+			return "";
+		}
+	}
+
 	public String AndroidThunkJava_GFCGetCacheDir()
 	{
 		java.io.File dir = getCacheDir();
@@ -299,6 +384,17 @@
 	<gameActivityOnCreateAdditions>
 		<insert><![CDATA[
 		gfcHandleIntent(getIntent(), false);
+
+		// Unreal's new keyboard puts a white EditText strip above the keyboard (createVirtualKeyboardInput).
+		// It must stay - it receives the typing and passes it to the app's text boxes, which show it -
+		// so make it invisible instead of painting a white bar over the interface.
+		if (newVirtualKeyboardInput != null)
+		{
+			newVirtualKeyboardInput.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+			newVirtualKeyboardInput.setTextColor(android.graphics.Color.TRANSPARENT);
+			newVirtualKeyboardInput.setHighlightColor(android.graphics.Color.TRANSPARENT);
+			newVirtualKeyboardInput.setCursorVisible(false);
+		}
 		]]></insert>
 	</gameActivityOnCreateAdditions>
 

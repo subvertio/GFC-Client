@@ -9,6 +9,11 @@
 #include "Windows/HideWindowsPlatformTypes.h"
 #endif
 
+#if PLATFORM_ANDROID
+#include "Android/AndroidApplication.h"
+#include "Android/AndroidJNI.h"
+#endif
+
 namespace
 {
 	// Not a secret: just ties the blob to this app so other DPAPI users can't swap it in.
@@ -27,6 +32,30 @@ namespace
 		return FString(Conv.Length(), Conv.Get());
 	}
 
+#if PLATFORM_ANDROID
+	// Blobs made by the Android Keystore path start with this; anything else is a plain
+	// token saved by 0.1.0, accepted once and re-saved protected (UGFCApiSubsystem).
+	const TCHAR* GAndroidPrefix = TEXT("GK1:");
+
+	/** Calls a GameActivity String(String) method from GFCApi_UPL.xml; empty on any failure. */
+	FString CallActivity(const char* Name, const FString& Arg)
+	{
+		JNIEnv* Env = FAndroidApplication::GetJavaEnv();
+		if (!Env)
+		{
+			return FString();
+		}
+		const jmethodID Method = FJavaWrapper::FindMethod(Env, FJavaWrapper::GameActivityClassID, Name, "(Ljava/lang/String;)Ljava/lang/String;", false);
+		if (!Method)
+		{
+			return FString();
+		}
+		auto JArg = FJavaHelper::ToJavaString(Env, Arg);
+		jstring JResult = (jstring)FJavaWrapper::CallObjectMethod(Env, FJavaWrapper::GameActivityThis, Method, *JArg);
+		return FJavaHelper::FStringFromLocalRef(Env, JResult);
+	}
+#endif
+
 	void WarnPlainOnce()
 	{
 		static bool bWarned = false;
@@ -40,7 +69,16 @@ namespace
 
 bool FGFCSecureStore::IsHardwareOrOsBacked()
 {
-	return PLATFORM_WINDOWS != 0;
+	return PLATFORM_WINDOWS != 0 || PLATFORM_ANDROID != 0;
+}
+
+bool FGFCSecureStore::NeedsUpgrade(const TArray<uint8>& Blob)
+{
+#if PLATFORM_ANDROID
+	return Blob.Num() > 0 && !FromUtf8(Blob.GetData(), Blob.Num()).StartsWith(GAndroidPrefix, ESearchCase::CaseSensitive);
+#else
+	return false;
+#endif
 }
 
 bool FGFCSecureStore::Protect(const FString& Secret, TArray<uint8>& OutBlob)
@@ -61,8 +99,16 @@ bool FGFCSecureStore::Protect(const FString& Secret, TArray<uint8>& OutBlob)
 	FMemory::Memcpy(OutBlob.GetData(), Out.pbData, Out.cbData);
 	LocalFree(Out.pbData);
 	return true;
+#elif PLATFORM_ANDROID
+	FMemory::Memzero(Plain.GetData(), Plain.Num());
+	const FString Sealed = CallActivity("AndroidThunkJava_GFCProtect", Secret);
+	if (Sealed.IsEmpty())
+	{
+		return false;
+	}
+	ToUtf8(GAndroidPrefix + Sealed, OutBlob);
+	return true;
 #else
-	// TODO(android-keystore): see header.
 	WarnPlainOnce();
 	OutBlob = MoveTemp(Plain);
 	return true;
@@ -86,6 +132,15 @@ bool FGFCSecureStore::Unprotect(const TArray<uint8>& Blob, FString& OutSecret)
 	OutSecret = FromUtf8(Out.pbData, static_cast<int32>(Out.cbData));
 	SecureZeroMemory(Out.pbData, Out.cbData);
 	LocalFree(Out.pbData);
+	return !OutSecret.IsEmpty();
+#elif PLATFORM_ANDROID
+	const FString Stored = FromUtf8(Blob.GetData(), Blob.Num());
+	if (Stored.StartsWith(GAndroidPrefix, ESearchCase::CaseSensitive))
+	{
+		OutSecret = CallActivity("AndroidThunkJava_GFCUnprotect", Stored.RightChop(FCString::Strlen(GAndroidPrefix)));
+		return !OutSecret.IsEmpty();
+	}
+	OutSecret = Stored;  // a plain token from 0.1.0; NeedsUpgrade() makes the caller re-save it protected
 	return !OutSecret.IsEmpty();
 #else
 	WarnPlainOnce();
