@@ -16,6 +16,9 @@ struct FGeometry;
  * Call Tick from a widget's NativeTick. When the focused field or the widget's height
  * changes, it waits for layout to settle, then scrolls the field's nearest scroll box
  * just enough to show it, with a little room above the keyboard.
+ *
+ * On Android it also lays the platform's own text box over the field being edited
+ * (GFCNativeTextInput), so tapping moves the cursor and long-press selects, as in any app.
  */
 class GFCCLIENT_API FGFCKeyboardScroll
 {
@@ -25,6 +28,8 @@ public:
 private:
 	static UWidget* FindFocusedInput(UWidgetTree* Tree);
 	static void ShowInScrollBox(UWidget* Input);
+	/** Places, moves or releases the native text box for this frame. */
+	static void UpdateNativeText(UWidget* Focused);
 
 	TWeakObjectPtr<UWidget> LastFocused;
 	float LastHeight = 0.f;

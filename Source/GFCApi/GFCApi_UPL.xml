@@ -378,8 +378,116 @@
 		java.io.File dir = getCacheDir();
 		return dir != null ? dir.getAbsolutePath() : "";
 	}
+
+	// ---- GFC native text editing (FGFCNativeTextInput) ----
+	// Unreal types through its hidden EditText (newVirtualKeyboardInput) and copies the text into
+	// the app's text box, but its cursor only syncs one way: tapping the app's box can't move it,
+	// and Slate has no phone selection handles. While a field is being edited, the EditText is laid
+	// exactly over it, styled like it, so the person touches a real Android text box: tap to place
+	// the cursor, drag, long-press to select, handles, copy/paste. Unreal still syncs its text and
+	// selection back to the app's box. Coordinates come in Slate pixels and are scaled to views.
+	private boolean gfcTextPlaced = false;
+	private int gfcTextX, gfcTextY, gfcTextW, gfcTextH, gfcTextSlateW;
+	private float gfcTextPx, gfcTextRadius;
+	private int gfcTextPadL, gfcTextPadT, gfcTextPadR, gfcTextPadB;
+	private int gfcTextColor, gfcTextHintColor, gfcTextBgColor, gfcTextAccentColor;
+	private boolean gfcTextMultiLine = false;
+	private String gfcTextHint = "";
+
+	public void AndroidThunkJava_GFCPlaceTextInput(final int x, final int y, final int w, final int h, final int slateW,
+		final float textPx, final int padL, final int padT, final int padR, final int padB,
+		final int textColor, final int hintColor, final int bgColor, final int accentColor, final float radius, final String hint,
+		final boolean multiLine)
+	{
+		runOnUiThread(new Runnable() { public void run()
+		{
+			gfcTextX = x; gfcTextY = y; gfcTextW = w; gfcTextH = h; gfcTextSlateW = slateW;
+			gfcTextPx = textPx; gfcTextPadL = padL; gfcTextPadT = padT; gfcTextPadR = padR; gfcTextPadB = padB;
+			gfcTextColor = textColor; gfcTextHintColor = hintColor; gfcTextBgColor = bgColor; gfcTextAccentColor = accentColor;
+			gfcTextRadius = radius; gfcTextHint = hint != null ? hint : ""; gfcTextMultiLine = multiLine;
+			gfcTextPlaced = true;
+			gfcApplyTextPlacement();
+		}});
+	}
+
+	public void AndroidThunkJava_GFCReleaseTextInput()
+	{
+		runOnUiThread(new Runnable() { public void run()
+		{
+			if (!gfcTextPlaced || newVirtualKeyboardInput == null) return;
+			gfcTextPlaced = false;
+			// Back to the invisible strip Unreal keeps above the keyboard (see OnCreate below)
+			newVirtualKeyboardInput.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+			newVirtualKeyboardInput.setTextColor(android.graphics.Color.TRANSPARENT);
+			newVirtualKeyboardInput.setHintTextColor(android.graphics.Color.TRANSPARENT);
+			newVirtualKeyboardInput.setHighlightColor(android.graphics.Color.TRANSPARENT);
+			newVirtualKeyboardInput.setCursorVisible(false);
+			newVirtualKeyboardInput.setHint("");
+			newVirtualKeyboardInput.setY(-1000);
+		}});
+	}
+
+	private void gfcApplyTextPlacement()
+	{
+		android.widget.EditText e = newVirtualKeyboardInput;
+		if (!gfcTextPlaced || e == null) return;
+		int viewW = MySurfaceView != null && MySurfaceView.getWidth() > 0 ? MySurfaceView.getWidth() : virtualKeyboardLayout.getWidth();
+		float s = gfcTextSlateW > 0 && viewW > 0 ? (float)viewW / gfcTextSlateW : 1.0f;
+		int w = Math.max(1, Math.round(gfcTextW * s));
+		int h = Math.max(1, Math.round(gfcTextH * s));
+		android.view.ViewGroup.LayoutParams lp = e.getLayoutParams();
+		if (lp != null && (lp.width != w || lp.height != h))
+		{
+			lp.width = w;
+			lp.height = h;
+			// Unreal rewrites lp.width on every layout pass (without asking for a new layout). Undo that
+			// quietly when the box already has our size; only ask for a layout when it really changes,
+			// or the two would keep triggering each other.
+			if (e.getWidth() != w || e.getHeight() != h) e.setLayoutParams(lp);
+		}
+		e.setX(Math.round(gfcTextX * s));
+		e.setY(Math.round(gfcTextY * s));
+		float px = gfcTextPx * s;
+		if (Math.abs(e.getTextSize() - px) > 0.5f) e.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, px);
+		int pl = Math.round(gfcTextPadL * s), pt = Math.round(gfcTextPadT * s), pr = Math.round(gfcTextPadR * s), pb = Math.round(gfcTextPadB * s);
+		if (e.getPaddingLeft() != pl || e.getPaddingTop() != pt || e.getPaddingRight() != pr || e.getPaddingBottom() != pb) e.setPadding(pl, pt, pr, pb);
+		e.setIncludeFontPadding(false);
+		e.setGravity(android.view.Gravity.TOP | android.view.Gravity.START);
+		if (gfcTextMultiLine)
+		{
+			// Wrap onto new lines inside the field's width. The one EditText serves every field, and a
+			// single-line field before this one may have left it scrolled sideways: start of text cut off.
+			e.setHorizontallyScrolling(false);
+			e.setMaxLines(Integer.MAX_VALUE); // the box has the field's height and scrolls inside it
+			e.setVerticalScrollBarEnabled(false);
+			if (e.getScrollX() != 0) e.scrollTo(0, e.getScrollY());
+		}
+		android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+		bg.setColor(gfcTextBgColor);
+		bg.setCornerRadius(gfcTextRadius * s);
+		e.setBackground(bg);
+		e.setTextColor(gfcTextColor);
+		e.setHintTextColor(gfcTextHintColor);
+		if (!gfcTextHint.contentEquals(e.getHint() != null ? e.getHint() : "")) e.setHint(gfcTextHint);
+		e.setHighlightColor((gfcTextAccentColor & 0x00FFFFFF) | 0x66000000);
+		e.setCursorVisible(true);
+		if (android.os.Build.VERSION.SDK_INT >= 29)
+		{
+			android.graphics.drawable.GradientDrawable caret = new android.graphics.drawable.GradientDrawable();
+			caret.setColor(gfcTextAccentColor);
+			caret.setSize(Math.max(2, Math.round(2 * s)), Math.round(px * 1.2f));
+			e.setTextCursorDrawable(caret);
+		}
+	}
 		]]></insert>
 	</gameActivityClassAdditions>
+
+	<!-- Unreal moves its EditText on every keyboard layout change (onGlobalLayout): put it back over the field. -->
+	<gameActivityResizeKeyboardAdditions>
+		<insert><![CDATA[
+		gfcApplyTextPlacement();
+		]]></insert>
+	</gameActivityResizeKeyboardAdditions>
 
 	<gameActivityOnCreateAdditions>
 		<insert><![CDATA[
