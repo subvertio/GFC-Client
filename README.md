@@ -195,8 +195,12 @@ Editor and `Run.ps1` runs aren't affected. The first window is 1280x800 and resi
 An installed app keeps its data in `%LOCALAPPDATA%\GFCClient\Saved` (signed-in session, settings, and wallet
 backups in `Saved\Backups`). Uninstalling leaves that folder, so a reinstall stays signed in.
 
-The icon is `Build/Windows/Application.ico`, drawn by `.\Scripts\MakeIcon.ps1`. Replace it with real artwork
-any time. The installer isn't code-signed yet, so Windows SmartScreen shows "unknown publisher" on first run.
+The app icon comes from one piece of artwork, `Build/Icon/GFCIcon.jpg` (the Pleiades constellation).
+`.\Scripts\MakeIcon.ps1` makes the Windows `Build/Windows/Application.ico` and the Android icons in
+`Build/Android/res` from it: a rounded square for old Android, and an adaptive icon for Android 8+ that the
+launcher masks to its own shape. Unreal uses those instead of its default icon. To change the icon,
+replace the .jpg, run the script and commit the results. The installer isn't code-signed yet, so Windows
+SmartScreen shows "unknown publisher" on first run.
 
 ## Android (UE 5.7)
 
