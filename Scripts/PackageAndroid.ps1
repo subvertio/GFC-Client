@@ -59,10 +59,10 @@ if ((Get-PSDrive C).Free / 1GB -lt 30) { throw 'Less than 30 GB free on C:. Free
 
 # The improved keyboard types into the field itself. Without it, every text field opens Android's
 # full-screen white text box over the app, so no build ships with it off (Config/Android/ would override).
-$keyboard = foreach ($ini in (Join-Path $root 'Config\DefaultEngine.ini'), (Join-Path $root 'Config\Android\AndroidEngine.ini')) {
+$keyboard = @(foreach ($ini in (Join-Path $root 'Config\DefaultEngine.ini'), (Join-Path $root 'Config\Android\AndroidEngine.ini')) {
     if (Test-Path $ini) { Select-String -Path $ini -Pattern '^\s*bEnableNewKeyboard\s*=\s*(\S+)' | ForEach-Object { $_.Matches[0].Groups[1].Value } }
-}
-if (-not $keyboard -or $keyboard[-1] -ne 'True') {
+})
+if ($keyboard.Count -eq 0 -or $keyboard[-1] -ne 'True') {
     throw 'bEnableNewKeyboard must be True under [/Script/AndroidRuntimeSettings.AndroidRuntimeSettings] in Config\DefaultEngine.ini (text fields open a full-screen white box otherwise).'
 }
 
