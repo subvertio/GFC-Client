@@ -44,8 +44,10 @@ void UGFCFeedScreen::BuildDefaultLayout()
 	T->RootWidget = Col;
 
 	UHorizontalBox* Header = MakeRow(T);
-	AddH(Header, MakeText(T, LOCTEXT("Title", "Feed"), 22, Text, true), 0.f);
-	AddH(Header, T->ConstructWidget<USpacer>(), 0.f, true);
+	PhoneTitle = MakeText(T, LOCTEXT("Title", "Feed"), 22, Text, true);
+	PhoneTitle->SetAutoWrapText(false);
+	PhoneTitle->SetClipping(EWidgetClipping::ClipToBounds);
+	AddH(Header, PhoneTitle, 0.f, true);
 	RefreshButton = MakeButton(T, LOCTEXT("Refresh", "Refresh"), PanelRaised);
 	AddH(Header, RefreshButton, 0.f);
 	AddV(Col, Header, 12.f);
@@ -260,6 +262,18 @@ void UGFCFeedScreen::UpdateHeader()
 		case EGFCFeedSource::Mine: PageTitle->SetText(bIn ? FText::FromString(C->GetUsername()) : LOCTEXT("ProfileTitle", "Profile")); break;
 		case EGFCFeedSource::User: PageTitle->SetText(FText::FromString(UserProfile.Username.IsEmpty() ? Query : UserProfile.Username)); break;
 		default: PageTitle->SetText(FText::GetEmpty()); break;
+		}
+	}
+	if (PhoneTitle)
+	{
+		// Says whose page this is on phones too, so it's clear the Feed button goes back to everyone's posts
+		switch (Source)
+		{
+		case EGFCFeedSource::Explore: PhoneTitle->SetText(LOCTEXT("ExploreTitle", "Explore")); break;
+		case EGFCFeedSource::Bookmarks: PhoneTitle->SetText(LOCTEXT("BookmarksTitle", "Bookmarks")); break;
+		case EGFCFeedSource::Mine: PhoneTitle->SetText(bIn ? FText::FromString(TEXT("@") + C->GetUsername()) : LOCTEXT("ProfileTitle", "Profile")); break;
+		case EGFCFeedSource::User: PhoneTitle->SetText(FText::FromString(TEXT("@") + (UserProfile.Username.IsEmpty() ? Query : UserProfile.Username))); break;
+		default: PhoneTitle->SetText(LOCTEXT("Title", "Feed")); break;
 		}
 	}
 	if (PageSubtitle)

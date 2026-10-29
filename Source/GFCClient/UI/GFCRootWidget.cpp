@@ -3,6 +3,7 @@
 #include "Blueprint/WidgetTree.h"
 #include "Components/Border.h"
 #include "Components/Button.h"
+#include "Components/ButtonSlot.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/Overlay.h"
@@ -103,7 +104,8 @@ void UGFCRootWidget::NativeOnInitialized()
 	SeedDetailScreen = AddScreen(CreateWidget<UGFCSeedDetailScreen>(this, SeedDetailScreenClass));
 	CreateScreen = AddScreen(CreateWidget<UGFCCreateScreen>(this, CreateScreenClass));
 
-	if (FeedNavButton) FeedNavButton->OnClicked.AddDynamic(this, &ThisClass::ShowFeed);
+	if (FeedNavButton) FeedNavButton->OnClicked.AddDynamic(this, &ThisClass::ShowHome); // everyone's posts, even from someone's page
+	if (BrandButton) BrandButton->OnClicked.AddDynamic(this, &ThisClass::ShowHome);
 	if (WalletNavButton) WalletNavButton->OnClicked.AddDynamic(this, &ThisClass::ShowWallet);
 	if (CreateNavButton) CreateNavButton->OnClicked.AddDynamic(this, &ThisClass::ShowCreate);
 	if (LogoutButton) LogoutButton->OnClicked.AddDynamic(this, &ThisClass::HandleLogout);
@@ -244,7 +246,15 @@ void UGFCRootWidget::BuildDefaultLayout()
 	UBorder* Bar = MakePanel(T, Background, FMargin(16.f, 6.f));
 	UHorizontalBox* BarRow = MakeRow(T);
 	Bar->AddChild(BarRow);
-	AddH(BarRow, MakeText(T, LOCTEXT("Brand", "GFC"), 22, AccentText, true), 12.f);
+	// The GFC logo goes back to the full feed, like the Feed button.
+	BrandButton = T->ConstructWidget<UButton>();
+	BrandButton->SetStyle(FlatButtonStyle());
+	BrandButton->SetTouchMethod(EButtonTouchMethod::PreciseTap);
+	UTextBlock* Brand = MakeText(T, LOCTEXT("Brand", "GFC"), 22, AccentText, true);
+	Brand->SetAutoWrapText(false);
+	BrandButton->AddChild(Brand);
+	if (UButtonSlot* S = Cast<UButtonSlot>(Brand->Slot)) S->SetPadding(FMargin(0.f));
+	AddH(BarRow, BrandButton, 12.f);
 	UserText = MakeText(T, FText::GetEmpty(), 12, TextDim);
 	UserText->SetAutoWrapText(false);
 	UserText->SetClipping(EWidgetClipping::ClipToBounds); // long names end at the Log out button
@@ -631,6 +641,11 @@ void UGFCRootWidget::GoBack()
 
 bool UGFCRootWidget::HandleBack()
 {
+	if (ActiveScreen == FeedScreen && FeedScreen->GetSource() != EGFCFeedSource::ForYou)
+	{
+		ShowHome(); // from someone's page (or Explore, Bookmarks, your profile) back to the full feed
+		return true;
+	}
 	if (ActiveScreen == FeedScreen || ActiveScreen == LoginScreen)
 	{
 		return false;
