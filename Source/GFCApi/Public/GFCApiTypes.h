@@ -53,6 +53,9 @@ struct GFCAPI_API FGFCAuthResult
 	FString Username;
 
 	FString Token;
+
+	/** Registration only: the account's recovery code, shown to the user once (never stored by the app). */
+	FString RecoveryCode;
 };
 
 /** GET /users/me */
@@ -225,6 +228,16 @@ struct GFCAPI_API FGFCVerifyStatus
 };
 
 /** POST /verify/link: a one-time page to verify the account's phone in the browser. */
+/** GET /account/security: what the account can recover with (account_recovery.py on the node). */
+struct GFCAPI_API FGFCAccountSecurity
+{
+	bool bRecoveryCode = false;
+	bool bEmailVerified = false;
+	/** Masked, e.g. a***@example.com. */
+	FString Email;
+	bool bPhoneVerified = false;
+};
+
 struct GFCAPI_API FGFCVerifyLink
 {
 	/** Already verified: nothing to open. */

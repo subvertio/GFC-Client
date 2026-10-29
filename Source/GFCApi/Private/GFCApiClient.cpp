@@ -384,6 +384,24 @@ void UGFCApiClient::CreateVerifyLink(TCallback<FGFCVerifyLink> Done)
 		MoveTemp(Done));
 }
 
+void UGFCApiClient::GetAccountSecurity(TCallback<FGFCAccountSecurity> Done)
+{
+	Call<FGFCAccountSecurity>(TEXT("GET"), TEXT("/account/security"), FString(), FString(), true,
+		&FGFCJson::ParseAccountSecurity, MoveTemp(Done));
+}
+
+void UGFCApiClient::CreateEmailLink(TCallback<FGFCVerifyLink> Done)
+{
+	Call<FGFCVerifyLink>(TEXT("POST"), TEXT("/email/link"), FormContentType, FString(), true, &FGFCJson::ParseEmailLink,
+		MoveTemp(Done));
+}
+
+void UGFCApiClient::NewRecoveryCode(const FString& Password, TCallback<FString> Done)
+{
+	Call<FString>(TEXT("POST"), TEXT("/account/recovery-code"), FormContentType,
+		FGFCUrl::FormBody({{TEXT("password"), Password}}), true, &FGFCJson::ParseRecoveryCode, MoveTemp(Done));
+}
+
 void UGFCApiClient::SearchSeeds(const FString& Query, TCallback<TArray<FGFCSeed>> Done)
 {
 	Call<TArray<FGFCSeed>>(TEXT("GET"), FGFCUrl::WithQuery(TEXT("/search"), {{TEXT("q"), Query}}), FString(), FString(),
