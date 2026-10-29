@@ -91,6 +91,8 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> MoreButton;
 	/** The preview area and its button; collapsed for text posts, which are all text. */
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UWidget> PreviewFrame;
+	/** Audio posts: the music player (seek, -15/+15 s, loop). Plays on in the mini player after leaving. */
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<class UGFCMusicPanel> MusicPanel;
 	/** The 3D view; created in code if a Blueprint doesn't provide one. */
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UGFCModelView> ModelView;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> PreviewNote;

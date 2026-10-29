@@ -109,7 +109,8 @@ A session belongs to the node that issued it; switching nodes logs you out.
 - On Windows the saved token is encrypted with **DPAPI** (bound to your Windows account) in
   `Saved/SaveGames/GFCSession.sav`. Android Keystore storage is a TODO for the Android build
   (`Source/GFCApi/Public/GFCSessionStore.h`).
-- Wallet backups are passphrase-encrypted by the node and saved to `Saved/Backups/`. Move them somewhere safe
+- Wallet backups are passphrase-encrypted by the node and saved to `Saved/Backups/` (in the installed Windows
+  app, `%LOCALAPPDATA%\GFCClient\Saved\Backups`). Move them somewhere safe
   and store the passphrase apart.
 - Uploaded models are untrusted: the parser bounds-checks every offset, never follows external URIs, and
   enforces size, triangle and texture budgets before building anything.
@@ -149,6 +150,36 @@ a seed, exports a backup, and logs out (checking the token is revoked). `-SaveSe
 logged in so `Run.ps1` opens straight to the feed.
 
 The memory and disk baseline check for the 3D viewer is in [docs/cache-policy.md](docs/cache-policy.md).
+
+## Windows app (installer)
+
+```powershell
+winget install JRSoftware.InnoSetup     # once: builds the installer
+.\Scripts\PackageWindows.ps1
+```
+
+This builds and cooks a standalone **Shipping** Win64 app into `Packaged\Windows\` and then the installer
+`Packaged\GFC-Setup-<version>-<commit>.exe`. Options: `-Config Development` (logs and console), `-NoInstaller`
+(folder only), `-SkipBuild` (redo just the installer), `-Jobs 4` (compiler memory).
+
+The installer (`Installer/GFC.iss`):
+
+- installs per user without an admin prompt (or for all users, which it offers), into `%LOCALAPPDATA%\Programs\GFC`;
+- adds a **Start menu** entry, an optional desktop shortcut, and an uninstaller in Settings > Apps;
+- registers **`gfc:` links**, so share links (`gfc://seed/<id>`) and the return from phone verification
+  (`gfc://verified`) open the app;
+- installs the Visual C++ runtime only if the PC doesn't have it (that step asks for admin).
+
+The packaged app runs as **one copy** (`Source/GFCApi/Private/GFCSingleInstance.cpp`). Opening a `gfc:` link or
+the shortcut while it runs passes the link to the open window over a named pipe and brings it to the front.
+Editor and `Run.ps1` runs aren't affected. The first window is 1280x800 and resizable
+(`Config/Windows/WindowsGameUserSettings.ini`).
+
+An installed app keeps its data in `%LOCALAPPDATA%\GFCClient\Saved` (signed-in session, settings, and wallet
+backups in `Saved\Backups`). Uninstalling leaves that folder, so a reinstall stays signed in.
+
+The icon is `Build/Windows/Application.ico`, drawn by `.\Scripts\MakeIcon.ps1`. Replace it with real artwork
+any time. The installer isn't code-signed yet, so Windows SmartScreen shows "unknown publisher" on first run.
 
 ## Android (UE 5.7)
 

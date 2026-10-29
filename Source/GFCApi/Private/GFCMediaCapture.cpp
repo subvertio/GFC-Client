@@ -47,6 +47,8 @@ FString FGFCMediaCapture::MimeForFile(const FString& FileName)
 		{TEXT("gif"), TEXT("image/gif")}, {TEXT("webp"), TEXT("image/webp")},
 		{TEXT("mp4"), TEXT("video/mp4")}, {TEXT("mov"), TEXT("video/quicktime")}, {TEXT("webm"), TEXT("video/webm")},
 		{TEXT("mp3"), TEXT("audio/mpeg")}, {TEXT("wav"), TEXT("audio/wav")}, {TEXT("ogg"), TEXT("audio/ogg")}, {TEXT("m4a"), TEXT("audio/mp4")},
+		{TEXT("oga"), TEXT("audio/ogg")}, {TEXT("opus"), TEXT("audio/opus")}, {TEXT("flac"), TEXT("audio/flac")}, {TEXT("aac"), TEXT("audio/aac")},
+		{TEXT("aif"), TEXT("audio/aiff")}, {TEXT("aiff"), TEXT("audio/aiff")}, {TEXT("wma"), TEXT("audio/x-ms-wma")},
 		{TEXT("glb"), TEXT("model/gltf-binary")}, {TEXT("gltf"), TEXT("model/gltf+json")},
 		{TEXT("txt"), TEXT("text/plain")}, {TEXT("md"), TEXT("text/markdown")},
 	};

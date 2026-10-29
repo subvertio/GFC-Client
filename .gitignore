@@ -22,7 +22,8 @@ DerivedDataCache/
 compile_commands.json
 
 # Packaged builds and local outputs
-Build/Windows/
+Build/Windows/*
+!Build/Windows/Application.ico
 Build/Android/
 Packaged/
 *.apk
@@ -39,3 +40,6 @@ Packaged/
 
 # Written by PackageAndroid.ps1 -Release for one build (holds the key password), then deleted
 Config/Android/AndroidEngine.ini
+
+# Python bytecode from Scripts/*.py
+__pycache__/

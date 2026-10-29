@@ -5,6 +5,7 @@
 #include "MediaPlayer.h"
 #include "MediaSoundComponent.h"
 #include "MediaTexture.h"
+#include "Components/Image.h"
 
 bool UGFCMediaSession::Open(UWorld* World, const FString& FilePath)
 {
@@ -67,6 +68,34 @@ void UGFCMediaSession::TogglePause()
 	{
 		Player->Play();
 	}
+}
+
+void UGFCMediaSession::Seek(float Seconds)
+{
+	if (Player && Player->SupportsSeeking())
+	{
+		Player->Seek(FTimespan::FromSeconds(FMath::Max(0.f, Seconds)));
+	}
+}
+void UGFCMediaSession::SetLooping(bool bLoop)
+{
+	if (Player) Player->SetLooping(bLoop);
+}
+
+void UGFCMediaSession::FitBrush(UImage* Image) const
+{
+	if (!Image || !Texture)
+	{
+		return;
+	}
+	const FVector2D Size(Texture->GetWidth(), Texture->GetHeight());
+	if (Size.X < 2.0 || Size.Y < 2.0 || Image->GetBrush().ImageSize == Size)
+	{
+		return; // no frame yet, or already right
+	}
+	FSlateBrush Brush = Image->GetBrush();
+	Brush.ImageSize = Size;
+	Image->SetBrush(Brush);
 }
 
 void UGFCMediaSession::SetMuted(bool bInMuted)

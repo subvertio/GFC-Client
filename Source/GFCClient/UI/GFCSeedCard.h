@@ -9,6 +9,7 @@
 class UButton;
 class UGFCMediaSession;
 class UImage;
+class UScaleBox;
 class USizeBox;
 class UTextBlock;
 
@@ -62,6 +63,8 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> BodyText;
 	/** The media frame around ThumbImage; collapsed for text posts. */
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UWidget> MediaFrame;
+	/** Around ThumbImage: fills the frame for thumbnails, fits (letterboxed) while a video plays. */
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UScaleBox> ThumbScale;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidget)) TObjectPtr<UTextBlock> TitleText;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidget)) TObjectPtr<UTextBlock> OwnerText;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> MetaText;

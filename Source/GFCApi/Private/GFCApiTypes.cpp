@@ -32,7 +32,8 @@ EGFCMediaKind FGFCSeed::GetMediaKind() const
 	static const TSet<FString> Model{TEXT("glb"), TEXT("gltf"), TEXT("fbx"), TEXT("obj"), TEXT("usdz"), TEXT("stl"), TEXT("3ds")};
 	static const TSet<FString> Image{TEXT("jpg"), TEXT("jpeg"), TEXT("png"), TEXT("gif"), TEXT("webp"), TEXT("bmp"), TEXT("tiff"), TEXT("tga")};
 	static const TSet<FString> Video{TEXT("mp4"), TEXT("mov"), TEXT("avi"), TEXT("webm"), TEXT("mkv"), TEXT("wmv"), TEXT("flv")};
-	static const TSet<FString> Audio{TEXT("mp3"), TEXT("wav"), TEXT("ogg"), TEXT("flac"), TEXT("aac"), TEXT("wma"), TEXT("m4a")};
+	static const TSet<FString> Audio{TEXT("mp3"), TEXT("wav"), TEXT("ogg"), TEXT("oga"), TEXT("opus"), TEXT("flac"), TEXT("aac"),
+		TEXT("m4a"), TEXT("aif"), TEXT("aiff"), TEXT("wma")};
 	if (Model.Contains(Ext)) return EGFCMediaKind::Model3D;
 	if (Image.Contains(Ext)) return EGFCMediaKind::Image;
 	if (Video.Contains(Ext)) return EGFCMediaKind::Video;

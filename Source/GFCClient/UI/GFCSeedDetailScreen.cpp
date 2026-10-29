@@ -33,6 +33,7 @@
 #include "Misc/FileHelper.h"
 #include "Components/Spacer.h"
 #include "UI/GFCActionSheet.h"
+#include "UI/GFCMusicWidgets.h"
 #include "UI/GFCRootWidget.h"
 #include "UI/GFCSeedCard.h"
 #include "UI/GFCUIStyle.h"
@@ -137,6 +138,9 @@ void UGFCSeedDetailScreen::BuildDefaultLayout()
 	PrimaryButton = MakeButton(T, LOCTEXT("View", "View"), Accent, &Label);
 	PrimaryLabel = Label;
 	AddV(Col, PrimaryButton, 16.f);
+	MusicPanel = CreateWidget<UGFCMusicPanel>(this, UGFCMusicPanel::StaticClass());
+	MusicPanel->SetVisibility(ESlateVisibility::Collapsed);
+	AddV(Col, MusicPanel, 16.f);
 
 	TitleText = MakeText(T, FText::GetEmpty(), 24, Text, true);
 	OwnerText = MakeText(T, FText::GetEmpty(), 14, AccentText);
@@ -267,7 +271,13 @@ void UGFCSeedDetailScreen::Render()
 	}
 	const ESlateVisibility MediaVis = Kind == EGFCMediaKind::Text ? ESlateVisibility::Collapsed : ESlateVisibility::Visible;
 	if (PreviewFrame) PreviewFrame->SetVisibility(MediaVis);
-	if (PrimaryButton) PrimaryButton->SetVisibility(MediaVis);
+	const bool bAudio = Kind == EGFCMediaKind::Audio;
+	if (PrimaryButton) PrimaryButton->SetVisibility(bAudio ? ESlateVisibility::Collapsed : MediaVis);
+	if (MusicPanel)
+	{
+		MusicPanel->SetVisibility(bAudio ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+		if (bAudio) MusicPanel->SetSeed(Seed);
+	}
 	if (MetaText)
 	{
 		const FString Tags = Seed.Tags.Num() ? FString::Join(Seed.Tags, TEXT(", ")) : FString(TEXT("none"));
@@ -390,12 +400,14 @@ void UGFCSeedDetailScreen::LoadFullContent()
 {
 	UGFCCacheSubsystem* Cache = GetGameInstance()->GetSubsystem<UGFCCacheSubsystem>();
 	const UGFCApiClient* C = Client();
-	if (!Cache || !C || Seed.Full.IsEmpty())
+	if (!Cache || !C || Seed.GetPlaybackPath().IsEmpty())
 	{
 		return;
 	}
+	// FileSize is the original's; a streaming copy is much smaller (the download's own cap still applies).
+	const bool bStreamCopy = !Seed.Stream.IsEmpty();
 	const int64 Cap = MaxBytesForKind();
-	if (Seed.FileSize > Cap)
+	if (!bStreamCopy && Seed.FileSize > Cap)
 	{
 		SetState(EGFCDetailState::Failed, FText::Format(LOCTEXT("TooBigKnown", "This file is {0} MB; the limit on phones is {1} MB."),
 			MegaBytes(Seed.FileSize), MegaBytes(Cap)));
@@ -405,7 +417,9 @@ void UGFCSeedDetailScreen::LoadFullContent()
 	const int64 AskAbove = int64(GetDefault<UGFCApiSettings>()->CellularConfirmMB) * 1024 * 1024;
 	if (UGFCCacheSubsystem::IsOnCellular() && Seed.FileSize > AskAbove)
 	{
-		SetState(EGFCDetailState::ConfirmCellular, FText::Format(LOCTEXT("AskCell", "You're on mobile data. Download {0} MB?"), MegaBytes(Seed.FileSize)));
+		SetState(EGFCDetailState::ConfirmCellular, bStreamCopy
+			? LOCTEXT("AskCellStream", "You're on mobile data. Play it anyway?")
+			: FText::Format(LOCTEXT("AskCell", "You're on mobile data. Download {0} MB?"), MegaBytes(Seed.FileSize)));
 		return;
 	}
 	StartDownload();
@@ -414,10 +428,10 @@ void UGFCSeedDetailScreen::LoadFullContent()
 void UGFCSeedDetailScreen::StartDownload()
 {
 	UGFCCacheSubsystem* Cache = GetGameInstance()->GetSubsystem<UGFCCacheSubsystem>();
-	const FString Url = Client()->ResolveMediaUrl(Seed.Full);
+	const FString Url = Client()->ResolveMediaUrl(Seed.GetPlaybackPath());
 	const uint32 Serial = ++LoadSerial;
 	LoadStarted = FPlatformTime::Seconds();
-	SetState(EGFCDetailState::Downloading, Seed.FileSize > 0
+	SetState(EGFCDetailState::Downloading, Seed.FileSize > 0 && Seed.Stream.IsEmpty()
 		? FText::Format(LOCTEXT("DlSize", "Downloading {0}…"), FileSize(Seed.FileSize))
 		: LOCTEXT("Dl", "Downloading…"));
 
@@ -512,7 +526,7 @@ void UGFCSeedDetailScreen::OnDownloaded(const FString& Path)
 		PreviewImage->SetBrushResourceObject(Media->GetVideoTexture());
 		PreviewImage->SetColorAndOpacity(FLinearColor::White);
 	}
-	SetState(EGFCDetailState::Ready, Kind == EGFCMediaKind::Audio ? LOCTEXT("PlayingAudio", "♫ Playing") : FText::GetEmpty());
+	SetState(EGFCDetailState::Ready, Kind == EGFCMediaKind::Audio ? LOCTEXT("PlayingAudio", "Playing") : FText::GetEmpty());
 }
 
 void UGFCSeedDetailScreen::ShowModel(TSharedPtr<FGFCModelData> Model)
@@ -588,8 +602,12 @@ void UGFCSeedDetailScreen::HandleOwnerReleased(const FString& Owner)
 void UGFCSeedDetailScreen::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
+	if (Media && Media->GetVideoTexture())
+	{
+		Media->FitBrush(PreviewImage); // letterboxed at the video's own aspect, in any orientation
+	}
 
-	const bool bLoading = State == EGFCDetailState::Downloading || State == EGFCDetailState::Preparing;
+	const bool bLoading =State == EGFCDetailState::Downloading || State == EGFCDetailState::Preparing;
 	if (bLoading && FPlatformTime::Seconds() - LoadStarted > GetDefault<UGFCApiSettings>()->ModelLoadTimeoutSeconds)
 	{
 		ReleaseContent();

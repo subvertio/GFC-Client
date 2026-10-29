@@ -209,6 +209,7 @@ void FGFCJson::ReadSeed(const TSharedPtr<FJsonObject>& Obj, FGFCSeed& Out)
 		}
 	}
 	Out.Full = Str(Obj, TEXT("full"));
+	Out.Stream = Str(Obj, TEXT("stream"));
 	Out.Thumb = Str(Obj, TEXT("thumb"));
 	Out.ContentType = Str(Obj, TEXT("content_type"));
 	Out.FileSize = Int(Obj, TEXT("file_size"));
