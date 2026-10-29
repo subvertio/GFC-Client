@@ -32,7 +32,7 @@ public:
 	void SetSeed(const FGFCSeed& InSeed);
 
 	FGFCOnSeedSelected OnSelected;
-	/** "•••": report or block (GFCShowPostActions). */
+	/** "•••": report or block, or edit your own post (GFCShowPostActions). */
 	FGFCOnSeedSelected OnMore;
 
 	UFUNCTION(BlueprintPure, Category = "GFC")
@@ -82,6 +82,8 @@ protected:
 	/** "Repost of @original": shown when the node matched this post to an earlier original. */
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> RepostText;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> MoreButton;
+	/** "· Edited" after the time, when the poster changed the post: opens the edit history. */
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> EditedButton;
 	/** Over the media: plays video/audio inline (or opens the seed for other kinds). */
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> MediaButton;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> MediaLabel;
@@ -112,6 +114,7 @@ private:
 	UFUNCTION() void HandleMediaClicked();
 	UFUNCTION() void HandleSoundClicked();
 	UFUNCTION() void HandleMoreClicked();
+	UFUNCTION() void HandleEditedClicked();
 	UFUNCTION() void HandleLike();
 	UFUNCTION() void HandleBookmark();
 	UFUNCTION() void HandleShare();

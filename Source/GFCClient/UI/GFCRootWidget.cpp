@@ -30,6 +30,7 @@
 #include "UI/GFCSeedDetailScreen.h"
 #include "GFCApi.h"
 #include "UI/GFCActionSheet.h"
+#include "UI/GFCPostEditor.h"
 #include "UI/GFCMusicWidgets.h"
 #include "UI/GFCRewardBurst.h"
 #include "Misc/CoreDelegates.h"
@@ -50,7 +51,7 @@ public:
 	{
 		if (Event.GetKey() == EKeys::Android_Back && Root.IsValid())
 		{
-			if (!UGFCActionSheet::CloseOpen()) // an open sheet closes first
+			if (!UGFCActionSheet::CloseOpen() && !UGFCPostPanel::CloseOpen()) // an open sheet or panel closes first
 			{
 				Root->HandleBack();
 			}
@@ -640,6 +641,15 @@ void UGFCRootWidget::OnPostHidden(const FString& SeedId)
 	if (ActiveScreen == SeedDetailScreen && SeedDetailScreen && SeedDetailScreen->GetSeed().Id == SeedId)
 	{
 		ShowFeed();
+	}
+}
+
+void UGFCRootWidget::OnPostEdited(const FGFCSeed& Updated)
+{
+	if (FeedScreen) FeedScreen->ApplyEdit(Updated);
+	if (SeedDetailScreen && SeedDetailScreen->GetSeed().Id == Updated.Id)
+	{
+		SeedDetailScreen->ApplyEdit(Updated);
 	}
 }
 

@@ -435,6 +435,40 @@ void UGFCApiClient::GetNetworkStats(TCallback<FGFCNetworkStats> Done)
 	Call<FGFCNetworkStats>(TEXT("GET"), TEXT("/podt/stats"), FString(), FString(), false, &FGFCJson::ParseNetworkStats, MoveTemp(Done));
 }
 
+void UGFCApiClient::EditSeed(const FString& SeedId, const FGFCSeedEditRequest& Edit, TCallback<FGFCSeedEdit> Done)
+{
+	TArray<TPair<FString, FString>> Fields;
+	if (Edit.Title.IsSet()) Fields.Add({TEXT("title"), Edit.Title.GetValue()});
+	if (Edit.Description.IsSet()) Fields.Add({TEXT("description"), Edit.Description.GetValue()});
+	if (Edit.Tags.IsSet()) Fields.Add({TEXT("tags"), JoinTags(Edit.Tags.GetValue())});
+	Call<FGFCSeedEdit>(TEXT("POST"), TEXT("/seeds/") + FGFCUrl::Encode(SeedId) + TEXT("/edit"), FormContentType,
+		FGFCUrl::FormBody(Fields), true, &FGFCJson::ParseSeedEditResult, MoveTemp(Done));
+}
+
+void UGFCApiClient::GetSeedEdits(const FString& SeedId, TCallback<TArray<FGFCSeedEdit>> Done)
+{
+	Call<TArray<FGFCSeedEdit>>(TEXT("GET"), TEXT("/seeds/") + FGFCUrl::Encode(SeedId) + TEXT("/edits"), FString(), FString(), false,
+		&FGFCJson::ParseSeedEdits, MoveTemp(Done));
+}
+
+FString UGFCApiClient::JoinTags(const TArray<FString>& Tags)
+{
+	return FString::Join(SplitTags(FString::Join(Tags, TEXT(","))), TEXT(","));
+}
+
+TArray<FString> UGFCApiClient::SplitTags(const FString& Text)
+{
+	TArray<FString> Parts;
+	Text.ParseIntoArray(Parts, TEXT(","), true);
+	TArray<FString> Out;
+	for (FString& P : Parts)
+	{
+		P.TrimStartAndEndInline();
+		if (!P.IsEmpty()) Out.Add(P);
+	}
+	return Out;
+}
+
 void UGFCApiClient::ReportSeed(const FString& SeedId, const FString& Reason, TFunction<void(const FGFCApiResult&)> Done)
 {
 	TWeakObjectPtr<UGFCApiClient> WeakThis(this);

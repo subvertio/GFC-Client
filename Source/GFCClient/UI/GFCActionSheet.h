@@ -58,7 +58,10 @@ private:
 };
 
 /**
- * Report / block for a post, from the feed or the post screen: the "•••" menu.
- * OnHidden runs once the post should disappear (reported, or its creator blocked).
+ * The "•••" menu for a post, from the feed or the post screen. Someone else's post: report / block,
+ * and OnHidden runs once the post should disappear. Your own: edit it (and its edit history); the
+ * app's cards and post screen update in place once the node saved the edit.
  */
 GFCCLIENT_API void GFCShowPostActions(UObject* WorldContext, const FGFCSeed& Seed, TFunction<void()> OnHidden);
+/** The "•••" menu for the user's own post: Edit post, and Edit history once it has been edited. */
+GFCCLIENT_API void GFCShowOwnPostActions(UObject* WorldContext, const FGFCSeed& Seed);

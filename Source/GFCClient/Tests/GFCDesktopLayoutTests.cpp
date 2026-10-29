@@ -51,6 +51,12 @@ bool FGFCTrendingTest::RunTest(const FString&)
 	TestEqual(TEXT("then views"), Top[2].Id, FString(TEXT("d")));
 	TestEqual(TEXT("ties keep feed order"), Top[4].Id, FString(TEXT("e")));
 	TestEqual(TEXT("empty feed"), UGFCRightRail::RankTrending({}, 5).Num(), 0);
+
+	FGFCTopEarner E;
+	E.Wallet = TEXT("0123456789abcdef0123456789abcdef");
+	TestEqual(TEXT("unconfirmed earner shows the wallet"), UGFCRightRail::EarnerName(E), GFCUI::ShortId(E.Wallet));
+	E.Owner = TEXT("alice");
+	TestEqual(TEXT("earner shows the account"), UGFCRightRail::EarnerName(E), FString(TEXT("@alice")));
 	return true;
 }
 

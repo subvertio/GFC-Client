@@ -479,6 +479,28 @@ void UGFCFeedScreen::RemoveHidden()
 	}
 }
 
+void UGFCFeedScreen::ApplyEdit(const FGFCSeed& Updated)
+{
+	if (!SeedList)
+	{
+		return;
+	}
+	for (UWidget* W : SeedList->GetAllChildren())
+	{
+		UGFCSeedCard* Card = Cast<UGFCSeedCard>(W);
+		if (Card && Card->GetSeed().Id == Updated.Id)
+		{
+			// Only the editable fields: the card keeps its own like/bookmark state and counts.
+			FGFCSeed S = Card->GetSeed();
+			S.Title = Updated.Title;
+			S.Description = Updated.Description;
+			S.Tags = Updated.Tags;
+			S.EditedAt = Updated.EditedAt;
+			Card->SetSeed(S);
+		}
+	}
+}
+
 void UGFCFeedScreen::Populate(const TArray<FGFCSeed>& Seeds)
 {
 	if (EmptyText)

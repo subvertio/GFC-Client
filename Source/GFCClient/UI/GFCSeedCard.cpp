@@ -24,6 +24,8 @@
 #include "Components/VerticalBoxSlot.h"
 #include "HAL/PlatformApplicationMisc.h"
 #include "UI/GFCCreateScreen.h"
+#include "Components/Spacer.h"
+#include "UI/GFCPostEditor.h"
 #include "UI/GFCRootWidget.h"
 #include "UI/GFCUIStyle.h"
 
@@ -92,6 +94,7 @@ void UGFCSeedCard::NativeOnInitialized()
 	if (MediaButton) MediaButton->OnClicked.AddDynamic(this, &ThisClass::HandleMediaClicked);
 	if (SoundButton) SoundButton->OnClicked.AddDynamic(this, &ThisClass::HandleSoundClicked);
 	if (MoreButton) MoreButton->OnClicked.AddDynamic(this, &ThisClass::HandleMoreClicked);
+	if (EditedButton) EditedButton->OnClicked.AddDynamic(this, &ThisClass::HandleEditedClicked);
 	if (ReplyButton) ReplyButton->OnClicked.AddDynamic(this, &ThisClass::HandleClicked); // comments live on the post's screen
 	if (LikeButton) LikeButton->OnClicked.AddDynamic(this, &ThisClass::HandleLike);
 	if (BookmarkButton) BookmarkButton->OnClicked.AddDynamic(this, &ThisClass::HandleBookmark);
@@ -150,7 +153,11 @@ void UGFCSeedCard::BuildDefaultLayout()
 	HandleText = MakeText(T, FText::GetEmpty(), 14, TextDim);
 	HandleText->SetAutoWrapText(false);
 	AddH(Header, OwnerText, 6.f);
-	AddH(Header, HandleText, 0.f, true);
+	AddH(Header, HandleText, 2.f);
+	// "· Edited" right after the time: its own small target, opening the edit history.
+	EditedButton = MakeTextLink(T, LOCTEXT("Edited", "· Edited"), 14);
+	AddH(Header, EditedButton, 0.f);
+	AddH(Header, T->ConstructWidget<USpacer>(), 0.f, true);
 	// Report / block: a small target of its own, so it never opens the post by accident.
 	MoreButton = T->ConstructWidget<UButton>();
 	MoreButton->SetStyle(FlatButtonStyle());
@@ -432,6 +439,7 @@ void UGFCSeedCard::SetSeed(const FGFCSeed& InSeed)
 		HandleText->SetText(When.IsEmpty() ? FText::FromString(TEXT("@") + Owner)
 			: FText::Format(LOCTEXT("HandleTime", "@{0} · {1}"), FText::FromString(Owner), When));
 	}
+	if (EditedButton) EditedButton->SetVisibility(Seed.EditedAt.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
 	if (RepostText)
 	{
 		RepostText->SetText(Seed.RepostOf.IsSet()
@@ -591,6 +599,11 @@ void UGFCSeedCard::HandleMediaClicked()
 void UGFCSeedCard::HandleMoreClicked()
 {
 	OnMore.ExecuteIfBound(Seed);
+}
+
+void UGFCSeedCard::HandleEditedClicked()
+{
+	UGFCPostPanel::ShowHistory(this, Seed);
 }
 
 void UGFCSeedCard::HandleSoundClicked()

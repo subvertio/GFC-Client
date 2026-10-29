@@ -88,6 +88,8 @@ public:
 
 	/** A post was reported or its creator blocked: off the feed, and off screen if it's open. */
 	void OnPostHidden(const FString& SeedId);
+	/** The poster edited a post: its feed cards and the open post screen show the new text in place. */
+	void OnPostEdited(const FGFCSeed& Updated);
 
 	/** Opens the node's phone verification page in the browser; the balance is checked on return. */
 	void StartPhoneVerification();

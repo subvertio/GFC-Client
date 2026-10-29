@@ -59,6 +59,33 @@ namespace
 		OutItems = *Items;
 		return true;
 	}
+
+	void ReadTags(const TSharedPtr<FJsonObject>& Obj, TArray<FString>& Out)
+	{
+		Out.Reset();
+		const TArray<TSharedPtr<FJsonValue>>* Tags = nullptr;
+		if (Obj->TryGetArrayField(TEXT("tags"), Tags))
+		{
+			for (const TSharedPtr<FJsonValue>& T : *Tags)
+			{
+				FString Tag;
+				if (T.IsValid() && T->TryGetString(Tag) && !Tag.IsEmpty())
+				{
+					Out.Add(Tag);
+				}
+			}
+		}
+	}
+
+	void ReadSeedEdit(const TSharedPtr<FJsonObject>& Obj, FGFCSeedEdit& Out)
+	{
+		Out.Id = Str(Obj, TEXT("id"));
+		Out.Title = Str(Obj, TEXT("title"));
+		Out.Description = Str(Obj, TEXT("description"));
+		ReadTags(Obj, Out.Tags);
+		Out.EditedAt = Str(Obj, TEXT("edited_at"));
+		Out.bSynced = !Obj->HasField(TEXT("synced")) || Bool(Obj, TEXT("synced"));
+	}
 }
 
 TSharedPtr<FJsonObject> FGFCJson::ParseObject(const FString& Body)
@@ -196,20 +223,8 @@ void FGFCJson::ReadSeed(const TSharedPtr<FJsonObject>& Obj, FGFCSeed& Out)
 	Out.Id = Str(Obj, TEXT("id"));
 	Out.Title = Str(Obj, TEXT("title"));
 	Out.Description = Str(Obj, TEXT("description"));
-	Out.Tags.Reset();
-	const TArray<TSharedPtr<FJsonValue>>* Tags = nullptr;
-	if (Obj->TryGetArrayField(TEXT("tags"), Tags))
-	{
-		for (const TSharedPtr<FJsonValue>& T : *Tags)
-		{
-			FString Tag;
-			if (T.IsValid() && T->TryGetString(Tag) && !Tag.IsEmpty())
-			{
-				Out.Tags.Add(Tag);
-			}
-		}
-	}
-	Out.Full = Str(Obj, TEXT("full"));
+	ReadTags(Obj, Out.Tags);
+	Out.Full =Str(Obj, TEXT("full"));
 	Out.Stream = Str(Obj, TEXT("stream"));
 	Out.Thumb = Str(Obj, TEXT("thumb"));
 	Out.ContentType = Str(Obj, TEXT("content_type"));
@@ -219,6 +234,7 @@ void FGFCJson::ReadSeed(const TSharedPtr<FJsonObject>& Obj, FGFCSeed& Out)
 	Out.Comments = static_cast<int32>(Int(Obj, TEXT("comments")));
 	Out.Views = static_cast<int32>(Int(Obj, TEXT("views")));
 	Out.CreatedAt = Str(Obj, TEXT("created_at"));
+	Out.EditedAt = Str(Obj, TEXT("edited_at"));
 	Out.Owner = Str(Obj, TEXT("owner"));
 	Out.OwnerAvatar = Str(Obj, TEXT("owner_avatar"));
 	Out.RewardWallet = Str(Obj, TEXT("reward_wallet"));
@@ -485,12 +501,43 @@ bool FGFCJson::ParseNetworkStats(const FString& Body, FGFCNetworkStats& Out)
 		{
 			FGFCTopEarner Earner;
 			Earner.Wallet = Str(*E, TEXT("wallet"));
+			Earner.Owner = Str(*E, TEXT("owner"));
 			Earner.EarnedGfc = Num(*E, TEXT("total_earned_gfc"));
 			Earner.Transfers = int32(Int(*E, TEXT("transfer_count")));
 			if (!Earner.Wallet.IsEmpty())
 			{
 				Out.TopEarners.Add(MoveTemp(Earner));
 			}
+		}
+	}
+	return true;
+}
+
+bool FGFCJson::ParseSeedEditResult(const FString& Body, FGFCSeedEdit& Out)
+{
+	const TSharedPtr<FJsonObject> Obj = ParseObject(Body);
+	if (!Obj.IsValid() || !Bool(Obj, TEXT("ok")) || !Obj->HasField(TEXT("edited_at")))
+	{
+		return false;
+	}
+	ReadSeedEdit(Obj, Out);
+	return true;
+}
+
+bool FGFCJson::ParseSeedEdits(const FString& Body, TArray<FGFCSeedEdit>& Out)
+{
+	TArray<TSharedPtr<FJsonValue>> Items;
+	if (!ReadItems(Body, TEXT("edits"), Items))
+	{
+		return false;
+	}
+	Out.Reset();
+	for (const TSharedPtr<FJsonValue>& Item : Items)
+	{
+		const TSharedPtr<FJsonObject>* Obj = nullptr;
+		if (Item.IsValid() && Item->TryGetObject(Obj))
+		{
+			ReadSeedEdit(*Obj, Out.AddDefaulted_GetRef());
 		}
 	}
 	return true;

@@ -116,6 +116,8 @@ namespace GFCUI
 	FButtonStyle FlatButtonStyle();
 	/** Transparent until hovered, then a rounded Hover fill: nav items, icon buttons. */
 	FButtonStyle GhostButtonStyle(const FLinearColor& Hover, float Radius = 24.f);
+	/** Small dim text that's tappable on its own (e.g. "Edited" after a post's time). */
+	UButton* MakeTextLink(UWidgetTree* Tree, const FText& Label, int32 Size = 14);
 
 	/** The GFC logo: "GFC" in white on an accent circle (the same mark as the Windows app icon). */
 	UWidget* MakeLogo(UWidgetTree* Tree, float Size = 40.f);

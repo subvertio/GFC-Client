@@ -161,6 +161,8 @@ struct GFCAPI_API FGFCSeed
 	UPROPERTY(BlueprintReadOnly, Category = "GFC") int32 Comments = 0;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC") int32 Views = 0;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC") FString CreatedAt;
+	/** When the poster last edited the title, text or tags ("edited_at"); empty if never. */
+	UPROPERTY(BlueprintReadOnly, Category = "GFC") FString EditedAt;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC") FString Owner;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC") FString OwnerAvatar;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC") FString RewardWallet;
@@ -171,6 +173,33 @@ struct GFCAPI_API FGFCSeed
 
 	/** Classifies the media from its content type, falling back to the file extension. */
 	EGFCMediaKind GetMediaKind() const;
+};
+
+/**
+ * POST /seeds/{id}/edit: the poster's changes. Unset fields stay as they are; media can't change.
+ * The node's limits: title 300 characters, description 20000, tags 1000 (comma-separated), 50 edits a post.
+ */
+struct GFCAPI_API FGFCSeedEditRequest
+{
+	TOptional<FString> Title;
+	TOptional<FString> Description;
+	TOptional<TArray<FString>> Tags;
+
+	static constexpr int32 MaxTitle = 300;
+	static constexpr int32 MaxDescription = 20000;
+	static constexpr int32 MaxTags = 1000;
+};
+
+/** One version of a post: the edit's result, or an entry in GET /seeds/{id}/edits (newest first). */
+struct GFCAPI_API FGFCSeedEdit
+{
+	FString Id;
+	FString Title;
+	FString Description;
+	TArray<FString> Tags;
+	FString EditedAt;
+	/** Edit result only: false for an older unsigned post, where the edit shows only on this node. */
+	bool bSynced = true;
 };
 
 /** GET /p/{id}/share */
@@ -253,10 +282,12 @@ struct GFCAPI_API FGFCToggleResult
 	int32 Count = -1;
 };
 
-/** One of the top earners in GET /podt/stats (by wallet: the node doesn't name owners). */
+/** One of the top earners in GET /podt/stats. */
 struct GFCAPI_API FGFCTopEarner
 {
 	FString Wallet;
+	/** The account name, when the node can confirm whose wallet it is ("owner"); else empty. */
+	FString Owner;
 	double EarnedGfc = 0.0;
 	int32 Transfers = 0;
 };

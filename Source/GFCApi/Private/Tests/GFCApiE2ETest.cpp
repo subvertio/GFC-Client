@@ -361,6 +361,58 @@ bool FGFCLocalNodeE2ETest::RunTest(const FString&)
 			Next();
 		});
 	});
+	Run->Add(TEXT("edit own post"), [this, C, X](auto Next)
+	{
+		FGFCSeedEditRequest Edit;
+		Edit.Title = TEXT("E2E photo (fixed)");
+		Edit.Tags = TArray<FString>{TEXT("e2e"), TEXT("test")};
+		C->EditSeed(X->SeedId, Edit, [this, C, X, Edit, Next](const FGFCApiResult& R, const FGFCSeedEdit& E)
+		{
+			TestTrue(FString::Printf(TEXT("edit ok (%s)"), *R.Error), R.bOk);
+			TestEqual(TEXT("edited title"), E.Title, TEXT("E2E photo (fixed)"));
+			TestEqual(TEXT("description unchanged"), E.Description, TEXT("Posted by the end-to-end test"));
+			TestEqual(TEXT("tags"), E.Tags.Num(), 2);
+			TestFalse(TEXT("edited_at set"), E.EditedAt.IsEmpty());
+			C->EditSeed(X->SeedId, Edit, [this, C, X, Next](const FGFCApiResult& Same, const FGFCSeedEdit&)
+			{
+				TestEqual(TEXT("same edit again is 400"), Same.StatusCode, 400);
+				TestFalse(FString::Printf(TEXT("with the node's message (%s)"), *Same.Error), Same.Error.IsEmpty());
+				C->GetSeed(X->SeedId, [this, C, X, Next](const FGFCApiResult& G, const FGFCSeed& S)
+				{
+					TestEqual(TEXT("seed shows the edit"), S.Title, TEXT("E2E photo (fixed)"));
+					TestFalse(TEXT("seed has edited_at"), S.EditedAt.IsEmpty());
+					C->GetSeedEdits(X->SeedId, [this, Next](const FGFCApiResult& H, const TArray<FGFCSeedEdit>& Edits)
+					{
+						TestTrue(FString::Printf(TEXT("history ok (%s)"), *H.Error), H.bOk);
+						TestTrue(TEXT("history has the edit"), Edits.Num() >= 1);
+						if (Edits.Num()) TestEqual(TEXT("newest first"), Edits[0].Title, TEXT("E2E photo (fixed)"));
+						AddInfo(FString::Printf(TEXT("edit history: %d versions"), Edits.Num()));
+						Next();
+					});
+				});
+			});
+		});
+	});
+	Run->Add(TEXT("someone else can't edit it"), [this, X, Node](auto Next)
+	{
+		UGFCApiClient* O = NewObject<UGFCApiClient>();
+		O->AddToRoot();
+		O->SetBaseUrl(Node);
+		O->TimeoutSeconds = 20.f;
+		O->Register(X->User + TEXT("c"), X->Password, TEXT(""), [this, O, X, Next](const FGFCApiResult& R, const FGFCAuthResult&)
+		{
+			TestTrue(FString::Printf(TEXT("third account (%s)"), *R.Error), R.bOk);
+			FGFCSeedEditRequest Edit;
+			Edit.Title = TEXT("not mine");
+			O->EditSeed(X->SeedId, Edit, [this, O, Next](const FGFCApiResult& E, const FGFCSeedEdit&)
+			{
+				TestEqual(TEXT("not your post is 403"), E.StatusCode, 403);
+				AddInfo(FString::Printf(TEXT("node said: %s"), *E.Error));
+				O->RemoveFromRoot();
+				Next();
+			});
+		});
+	});
 	Run->Add(TEXT("another account reports and blocks"), [this, C, X, Node](auto Next)
 	{
 		UGFCApiClient* B = NewObject<UGFCApiClient>();

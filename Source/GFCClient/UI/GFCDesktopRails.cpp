@@ -423,7 +423,7 @@ void UGFCRightRail::RefreshEarners()
 			NBox->AddChild(N);
 			AddH(Row, NBox, 6.f);
 			UVerticalBox* Who = MakeColumn(T);
-			UTextBlock* Wallet = MakeText(T, FText::FromString(ShortId(E.Wallet)), 15, Th.Text, true);
+			UTextBlock* Wallet = MakeText(T, FText::FromString(EarnerName(E)), 15, Th.Text, true);
 			Wallet->SetAutoWrapText(false);
 			Wallet->SetToolTipText(FText::FromString(E.Wallet));
 			AddV(Who, Wallet, 0.f);
@@ -439,6 +439,11 @@ void UGFCRightRail::RefreshEarners()
 			AddV(WeakThis->EarnersList, MakeText(T, LOCTEXT("NoEarners", "No paid views yet."), 14, Th.TextSecondary), 4.f);
 		}
 	});
+}
+
+FString UGFCRightRail::EarnerName(const FGFCTopEarner& Earner)
+{
+	return Earner.Owner.IsEmpty() ? ShortId(Earner.Wallet) : TEXT("@") + Earner.Owner;
 }
 
 TArray<FGFCSeed> UGFCRightRail::RankTrending(const TArray<FGFCSeed>& Feed, int32 Max)

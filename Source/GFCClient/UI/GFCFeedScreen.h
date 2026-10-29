@@ -98,6 +98,8 @@ private:
 public:
 	/** Drops posts the user just reported or whose creator they blocked, without reloading. */
 	void RemoveHidden();
+	/** Shows an edited post's new title, text and tags on its cards, without reloading. */
+	void ApplyEdit(const FGFCSeed& Updated);
 private:
 
 	/** Releases cards that have been off screen longer than the grace period; restores cards coming back. */

@@ -4,6 +4,7 @@
 
 #if WITH_DEV_AUTOMATION_TESTS
 
+#include "GFCApiClient.h"
 #include "GFCApiTypes.h"
 #include "GFCJson.h"
 
@@ -50,13 +51,47 @@ bool FGFCNetworkStatsJsonTest::RunTest(const FString&)
 {
 	FGFCNetworkStats S;
 	TestTrue(TEXT("stats parse"), FGFCJson::ParseNetworkStats(TEXT(R"({"ok":true,"total_transfers":12,"total_reward_gfc":3.5,
-		"top_seeders":[{"wallet":"w1","total_earned_gfc":2.25,"transfer_count":9,"total_bytes_mb":1.0},{"wallet":"","total_earned_gfc":1}]})"), S));
+		"top_seeders":[{"wallet":"w1","owner":"alice","total_earned_gfc":2.25,"transfer_count":9,"total_bytes_mb":1.0},
+		{"wallet":"w2","owner":"","total_earned_gfc":1.5},{"wallet":"w3","total_earned_gfc":1.25},{"wallet":"","total_earned_gfc":1}]})"), S));
 	TestEqual(TEXT("transfers"), S.TotalTransfers, int64(12));
 	TestEqual(TEXT("total"), S.TotalRewardGfc, 3.5);
-	TestEqual(TEXT("earners (no wallet dropped)"), S.TopEarners.Num(), 1);
+	TestEqual(TEXT("earners (no wallet dropped)"), S.TopEarners.Num(), 3);
 	TestEqual(TEXT("earned"), S.TopEarners[0].EarnedGfc, 2.25);
 	TestEqual(TEXT("count"), S.TopEarners[0].Transfers, 9);
+	TestEqual(TEXT("owner"), S.TopEarners[0].Owner, FString(TEXT("alice")));
+	TestTrue(TEXT("owner unconfirmed"), S.TopEarners[1].Owner.IsEmpty());
+	TestTrue(TEXT("older node: no owner"), S.TopEarners[2].Owner.IsEmpty());
 	TestFalse(TEXT("needs top_seeders"), FGFCJson::ParseNetworkStats(TEXT(R"({"ok":true})"), S));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGFCSeedEditJsonTest, "GFC.Desktop.SeedEditJson", DesktopApiFlags)
+bool FGFCSeedEditJsonTest::RunTest(const FString&)
+{
+	FGFCSeedEdit E;
+	TestTrue(TEXT("edit result parses"), FGFCJson::ParseSeedEditResult(TEXT(R"J({"ok":true,"id":"s1","title":"My ship (fixed)",
+		"description":"d","tags":["ships","3d"],"edited_at":"2026-10-29T10:00:00Z","synced":false})J"), E));
+	TestEqual(TEXT("title"), E.Title, FString(TEXT("My ship (fixed)")));
+	TestEqual(TEXT("tags"), E.Tags.Num(), 2);
+	TestFalse(TEXT("unsynced"), E.bSynced);
+	TestFalse(TEXT("needs ok and edited_at"), FGFCJson::ParseSeedEditResult(TEXT(R"({"ok":true,"id":"s1"})"), E));
+
+	TArray<FGFCSeedEdit> Edits;
+	TestTrue(TEXT("history parses"), FGFCJson::ParseSeedEdits(TEXT(R"({"edits":[
+		{"id":"e2","title":"New","description":"","tags":[],"edited_at":"2026-10-29T10:00:00Z"},
+		{"id":"e1","title":"Old","description":"x","tags":["a"],"edited_at":"2026-10-28T10:00:00Z"}]})"), Edits));
+	TestEqual(TEXT("two versions"), Edits.Num(), 2);
+	TestEqual(TEXT("newest first"), Edits[0].Title, FString(TEXT("New")));
+	TestTrue(TEXT("history is synced by default"), Edits[1].bSynced);
+
+	FGFCSeed Seed;
+	FGFCJson::ReadSeed(FGFCJson::ParseObject(TEXT(R"({"id":"s1","title":"t","edited_at":"2026-10-29T10:00:00Z"})")), Seed);
+	TestEqual(TEXT("seed edited_at"), Seed.EditedAt, FString(TEXT("2026-10-29T10:00:00Z")));
+	FGFCJson::ReadSeed(FGFCJson::ParseObject(TEXT(R"({"id":"s2","title":"t","edited_at":""})")), Seed);
+	TestTrue(TEXT("never edited"), Seed.EditedAt.IsEmpty());
+
+	TestEqual(TEXT("tags joined"), UGFCApiClient::JoinTags({TEXT(" ships "), TEXT(""), TEXT("3d")}), FString(TEXT("ships,3d")));
+	TestEqual(TEXT("tags split"), UGFCApiClient::SplitTags(TEXT("a, b,,  c ")).Num(), 3);
 	return true;
 }
 
