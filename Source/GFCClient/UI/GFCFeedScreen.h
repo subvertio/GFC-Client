@@ -22,6 +22,7 @@ enum class EGFCFeedSource : uint8
 	Explore,    // GET /search?q=..., or the most liked posts when there's no query
 	Bookmarks,  // GET /bookmarks
 	Mine,       // GET /seeds/mine (the profile)
+	User,       // GET /users/{name}/seeds: another account's posts (the query is the username)
 };
 
 /** Seed list, newest first. See docs/ui-spec.md#feed. */
@@ -109,6 +110,8 @@ private:
 	bool bWide = false;
 	EGFCFeedSource Source = EGFCFeedSource::ForYou;
 	FString Query;
+	/** User pages: the account's profile, for the header (empty until it loads). */
+	FGFCProfile UserProfile;
 	/** Bumped on every source change, so a late answer for the previous page is dropped. */
 	uint32 LoadSerial = 0;
 	TMap<TWeakObjectPtr<UGFCSeedCard>, float> OffscreenSeconds;

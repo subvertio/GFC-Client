@@ -513,6 +513,18 @@ bool FGFCJson::ParseNetworkStats(const FString& Body, FGFCNetworkStats& Out)
 	return true;
 }
 
+bool FGFCJson::ParseHealth(const FString& Body, FGFCNodeHealth& Out)
+{
+	const TSharedPtr<FJsonObject> Obj = ParseObject(Body);
+	if (!Obj.IsValid())
+	{
+		return false;
+	}
+	Out.Network = Str(Obj, TEXT("network"));
+	Out.bPhoneRequiredToPost = Bool(Obj, TEXT("phone_required_to_post"));
+	return true;
+}
+
 bool FGFCJson::ParseSeedEditResult(const FString& Body, FGFCSeedEdit& Out)
 {
 	const TSharedPtr<FJsonObject> Obj = ParseObject(Body);

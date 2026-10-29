@@ -40,12 +40,18 @@ namespace
 		int32 Index = -1;
 		bool bWaiting = false;
 		bool bFinished = false;
+		/** Set by a step to skip the rest (e.g. this node's rules don't fit the test). */
+		bool bStop = false;
 
 		void Add(const FString& Name, FStep Step) { Steps.Add({Name, MoveTemp(Step)}); }
 
 		/** Returns true when every step has run. */
 		bool Tick()
 		{
+			if (bStop && !bWaiting)
+			{
+				bFinished = true;
+			}
 			if (bFinished)
 			{
 				return true;
@@ -106,6 +112,20 @@ bool FGFCLocalNodeE2ETest::RunTest(const FString&)
 	TSharedRef<FGFCE2ERunner> Run = MakeShared<FGFCE2ERunner>();
 	AddInfo(FString::Printf(TEXT("Node %s, test user %s"), *C->GetBaseUrl(), *X->User));
 
+	Run->Add(TEXT("node rules"), [this, C, Run](auto Next)
+	{
+		C->GetNodeHealth([this, Run, Next](const FGFCApiResult& R, const FGFCNodeHealth& H)
+		{
+			TestTrue(FString::Printf(TEXT("health ok (%s)"), *R.Error), R.bOk);
+			if (H.bPhoneRequiredToPost)
+			{
+				// New accounts can't post here; GFC.E2E.PhoneToPost covers this kind of node.
+				AddInfo(TEXT("Skipped: this node needs a verified phone to post (real-network rules)."));
+				Run->bStop = true;
+			}
+			Next();
+		});
+	});
 	Run->Add(TEXT("register"), [this, C, X](auto Next)
 	{
 		C->Register(X->User, X->Password, TEXT(""), [this, C, X, Next](const FGFCApiResult& R, const FGFCAuthResult& A)
@@ -413,6 +433,27 @@ bool FGFCLocalNodeE2ETest::RunTest(const FString&)
 			});
 		});
 	});
+	Run->Add(TEXT("an account's page"), [this, C, X](auto Next)
+	{
+		C->GetUserSeeds(X->User, [this, C, X, Next](const FGFCApiResult& R, const TArray<FGFCSeed>& Seeds)
+		{
+			TestTrue(FString::Printf(TEXT("user seeds ok (%s)"), *R.Error), R.bOk);
+			TestTrue(TEXT("has the posted seed"), Seeds.ContainsByPredicate([X](const FGFCSeed& S) { return S.Id == X->SeedId; }));
+			TestTrue(TEXT("only that account's posts"), !Seeds.ContainsByPredicate([X](const FGFCSeed& S) { return !S.Owner.Equals(X->User, ESearchCase::IgnoreCase); }));
+			C->GetUserProfile(X->User, [this, C, X, Next](const FGFCApiResult& P, const FGFCProfile& Profile)
+			{
+				TestTrue(FString::Printf(TEXT("profile ok (%s)"), *P.Error), P.bOk);
+				TestTrue(TEXT("profile name"), Profile.Username.Equals(X->User, ESearchCase::IgnoreCase));
+				C->GetNodeHealth([this, Next](const FGFCApiResult& H, const FGFCNodeHealth& Health)
+				{
+					TestTrue(FString::Printf(TEXT("health ok (%s)"), *H.Error), H.bOk);
+					AddInfo(FString::Printf(TEXT("node network: %s, phone required to post: %s"), *Health.Network,
+						Health.bPhoneRequiredToPost ? TEXT("yes") : TEXT("no")));
+					Next();
+				});
+			});
+		});
+	});
 	Run->Add(TEXT("another account reports and blocks"), [this, C, X, Node](auto Next)
 	{
 		UGFCApiClient* B = NewObject<UGFCApiClient>();
@@ -499,6 +540,116 @@ bool FGFCLocalNodeE2ETest::RunTest(const FString&)
 	ADD_LATENT_AUTOMATION_COMMAND(FFunctionLatentCommand([this, Run, C, Start]()
 	{
 		if (FPlatformTime::Seconds() - Start > 120.0)
+		{
+			AddError(FString::Printf(TEXT("timed out during step %d"), Run->Index));
+			C->RemoveFromRoot();
+			return true;
+		}
+		if (!Run->Tick())
+		{
+			return false;
+		}
+		C->RemoveFromRoot();
+		return true;
+	}));
+	return true;
+}
+
+// A node on the real network's rules (no GFC_TREASURY_PUBKEYS): posting needs a verified phone.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGFCPhoneToPostE2ETest, "GFC.E2E.PhoneToPost",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ClientContext | EAutomationTestFlags::EngineFilter)
+bool FGFCPhoneToPostE2ETest::RunTest(const FString&)
+{
+	FString Node;
+	if (!FParse::Value(FCommandLine::Get(), TEXT("GFCE2ENode="), Node) || Node.IsEmpty())
+	{
+		AddInfo(TEXT("Skipped: pass -GFCE2ENode=http://127.0.0.1:8000 to run against a local test node."));
+		return true;
+	}
+	const bool bSaveSession = FParse::Param(FCommandLine::Get(), TEXT("GFCE2ESaveSession"));
+	UGFCApiClient* C = NewObject<UGFCApiClient>();
+	C->AddToRoot();
+	C->SetBaseUrl(Node);
+	C->TimeoutSeconds = 20.f;
+	struct FCtx
+	{
+		FString User = FString::Printf(TEXT("e2e_%s"), *FGuid::NewGuid().ToString(EGuidFormats::Digits).Left(10).ToLower());
+		FString Password = FGuid::NewGuid().ToString(EGuidFormats::Digits);
+	};
+	TSharedRef<FCtx> X = MakeShared<FCtx>();
+	TSharedRef<FGFCE2ERunner> Run = MakeShared<FGFCE2ERunner>();
+
+	Run->Add(TEXT("node rules"), [this, C, Run](auto Next)
+	{
+		C->GetNodeHealth([this, Run, Next](const FGFCApiResult& R, const FGFCNodeHealth& H)
+		{
+			TestTrue(FString::Printf(TEXT("health ok (%s)"), *R.Error), R.bOk);
+			if (!H.bPhoneRequiredToPost)
+			{
+				AddInfo(TEXT("Skipped: this node lets anyone post (a test net)."));
+				Run->bStop = true;
+			}
+			else
+			{
+				TestEqual(TEXT("the real network"), H.Network, TEXT("mainnet"));
+			}
+			Next();
+		});
+	});
+	Run->Add(TEXT("logged out can't post"), [this, C](auto Next)
+	{
+		FGFCUploadRequest Req;
+		Req.FilePath = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Automation/GFCE2E/phone_rule.txt"));
+		FFileHelper::SaveStringToFile(TEXT("phone rule"), *Req.FilePath);
+		Req.FileName = TEXT("phone_rule.txt");
+		Req.MimeType = TEXT("text/plain");
+		Req.Title = TEXT("phone rule");
+		C->Upload(Req, nullptr, [this, Next](const FGFCApiResult& R, const FGFCUploadResult&)
+		{
+			TestFalse(TEXT("refused"), R.bOk);
+			AddInfo(FString::Printf(TEXT("logged out: %d %s"), R.StatusCode, *R.Error));
+			Next();
+		});
+	});
+	Run->Add(TEXT("unverified account can't post"), [this, C, X](auto Next)
+	{
+		C->Register(X->User, X->Password, TEXT(""), [this, C, Next](const FGFCApiResult& R, const FGFCAuthResult&)
+		{
+			TestTrue(FString::Printf(TEXT("register ok (%s)"), *R.Error), R.bOk);
+			C->GetVerifyStatus([this, C, Next](const FGFCApiResult& V, const FGFCVerifyStatus& S)
+			{
+				TestFalse(TEXT("a new account isn't verified"), S.bVerified);
+				FGFCUploadRequest Req;
+				Req.FilePath = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Automation/GFCE2E/phone_rule.txt"));
+				Req.FileName = TEXT("phone_rule.txt");
+				Req.MimeType = TEXT("text/plain");
+				Req.Title = TEXT("phone rule");
+				C->Upload(Req, nullptr, [this, Next](const FGFCApiResult& U, const FGFCUploadResult&)
+				{
+					TestEqual(TEXT("403"), U.StatusCode, 403);
+					TestTrue(FString::Printf(TEXT("asks for a phone (%s)"), *U.Error), U.Error.Contains(TEXT("Verify your phone")));
+					Next();
+				});
+			});
+		});
+	});
+	if (bSaveSession)
+	{
+		Run->Add(TEXT("save session for UI run"), [this, C](auto Next)
+		{
+			UGFCSessionSave* Save = Cast<UGFCSessionSave>(UGameplayStatics::CreateSaveGameObject(UGFCSessionSave::StaticClass()));
+			Save->Username = C->GetUsername();
+			Save->NodeBaseUrl = C->GetBaseUrl();
+			TestTrue(TEXT("protect token"), FGFCSecureStore::Protect(C->GetTokenForStorage(), Save->ProtectedToken));
+			TestTrue(TEXT("session saved"), UGameplayStatics::SaveGameToSlot(Save, UGFCApiSubsystem::SlotName, 0));
+			Next();
+		});
+	}
+
+	const double Start = FPlatformTime::Seconds();
+	ADD_LATENT_AUTOMATION_COMMAND(FFunctionLatentCommand([this, Run, C, Start]()
+	{
+		if (FPlatformTime::Seconds() - Start > 60.0)
 		{
 			AddError(FString::Printf(TEXT("timed out during step %d"), Run->Index));
 			C->RemoveFromRoot();

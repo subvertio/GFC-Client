@@ -182,14 +182,36 @@ void UGFCFeedScreen::BindEvents()
 void UGFCFeedScreen::SetSource(EGFCFeedSource InSource, const FString& InQuery)
 {
 	const FString NewQuery = InQuery.TrimStartAndEnd();
-	if (InSource != Source || NewQuery != Query)
+	const bool bChanged = InSource != Source || NewQuery != Query;
+	if (bChanged)
 	{
 		++LoadSerial; // a load still running for the old page is ignored
 		bLoading = false;
 	}
 	Source = InSource;
 	Query = NewQuery;
-	if (SearchBox) SearchBox->SetText(FText::FromString(Query));
+	if (SearchBox) SearchBox->SetText(Source == EGFCFeedSource::Explore ? FText::FromString(Query) : FText::GetEmpty());
+	if (Source == EGFCFeedSource::User && bChanged)
+	{
+		// Another account's page shows at once: their name now, an empty list saying it's loading.
+		UserProfile = FGFCProfile();
+		UserProfile.Username = Query;
+		Populate({});
+		if (EmptyText) EmptyText->SetText(FText::Format(LOCTEXT("LoadingUser", "Loading @{0}'s posts…"), FText::FromString(Query)));
+		if (UGFCApiClient* C = Client())
+		{
+			TWeakObjectPtr<UGFCFeedScreen> WeakThis(this);
+			const uint32 Serial = LoadSerial;
+			C->GetUserProfile(Query, [WeakThis, Serial](const FGFCApiResult& R, const FGFCProfile& P)
+			{
+				if (R.bOk && WeakThis.IsValid() && WeakThis->LoadSerial == Serial)
+				{
+					WeakThis->UserProfile = P;
+					WeakThis->UpdateHeader();
+				}
+			});
+		}
+	}
 	UpdateHeader();
 }
 
@@ -236,12 +258,23 @@ void UGFCFeedScreen::UpdateHeader()
 		case EGFCFeedSource::Explore: PageTitle->SetText(LOCTEXT("ExploreTitle", "Explore")); break;
 		case EGFCFeedSource::Bookmarks: PageTitle->SetText(LOCTEXT("BookmarksTitle", "Bookmarks")); break;
 		case EGFCFeedSource::Mine: PageTitle->SetText(bIn ? FText::FromString(C->GetUsername()) : LOCTEXT("ProfileTitle", "Profile")); break;
+		case EGFCFeedSource::User: PageTitle->SetText(FText::FromString(UserProfile.Username.IsEmpty() ? Query : UserProfile.Username)); break;
 		default: PageTitle->SetText(FText::GetEmpty()); break;
 		}
 	}
 	if (PageSubtitle)
 	{
-		PageSubtitle->SetText(Source == EGFCFeedSource::Mine && bIn ? FText::FromString(TEXT("@") + C->GetUsername()) : FText::GetEmpty());
+		FText Sub;
+		if (Source == EGFCFeedSource::Mine && bIn)
+		{
+			Sub = FText::FromString(TEXT("@") + C->GetUsername());
+		}
+		else if (Source == EGFCFeedSource::User)
+		{
+			const FString Handle = TEXT("@") + (UserProfile.Username.IsEmpty() ? Query : UserProfile.Username);
+			Sub = FText::FromString(UserProfile.Bio.IsEmpty() ? Handle : Handle + TEXT(" · ") + UserProfile.Bio);
+		}
+		PageSubtitle->SetText(Sub);
 		PageSubtitle->SetVisibility(PageSubtitle->GetText().IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
 	}
 }
@@ -391,7 +424,12 @@ void UGFCFeedScreen::Refresh()
 		return;
 	}
 	bLoading = true;
-	if (EmptyText) EmptyText->SetText(LOCTEXT("Loading", "Loading the feed…"));
+	if (EmptyText)
+	{
+		EmptyText->SetText(Source == EGFCFeedSource::User
+			? FText::Format(LOCTEXT("LoadingUser", "Loading @{0}'s posts…"), FText::FromString(Query))
+			: LOCTEXT("Loading", "Loading the feed…"));
+	}
 	TWeakObjectPtr<UGFCFeedScreen> WeakThis(this);
 	const uint32 Serial = LoadSerial;
 	const EGFCFeedSource For = Source;
@@ -410,6 +448,7 @@ void UGFCFeedScreen::Refresh()
 		break;
 	case EGFCFeedSource::Bookmarks: C->GetBookmarks(Done); break;
 	case EGFCFeedSource::Mine: C->GetMySeeds(Done); break;
+	case EGFCFeedSource::User: C->GetUserSeeds(Query, Done); break;
 	default: C->GetFeed(Done); break;
 	}
 }
@@ -458,6 +497,11 @@ void UGFCFeedScreen::OnLoaded(const FGFCApiResult& R, const TArray<FGFCSeed>& Se
 	else if (List.Num() == 0 && For == EGFCFeedSource::Mine)
 	{
 		EmptyText->SetText(LOCTEXT("NoPosts", "You haven't posted yet."));
+	}
+	else if (For == EGFCFeedSource::User)
+	{
+		EmptyText->SetText(List.Num() == 0 ? FText::Format(LOCTEXT("NoUserPosts", "@{0} has no posts to show."), FText::FromString(Query))
+			: FText::Format(LOCTEXT("UserPosts", "{0} posts"), FText::AsNumber(List.Num())));
 	}
 }
 

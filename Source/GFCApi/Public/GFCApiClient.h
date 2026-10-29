@@ -104,6 +104,12 @@ public:
 	void GetBookmarks(TCallback<TArray<FGFCSeed>> Done);
 	/** The user's own seeds, newest first (login required). */
 	void GetMySeeds(TCallback<TArray<FGFCSeed>> Done);
+	/** Another account's posts, newest first (public; logged in, items carry liked/bookmarked). */
+	void GetUserSeeds(const FString& Name, TCallback<TArray<FGFCSeed>> Done);
+	/** Another account's public profile: name, bio, avatar, joined. */
+	void GetUserProfile(const FString& Name, TCallback<FGFCProfile> Done);
+	/** The node's network and posting rule (GET /health). Asked once per node, then remembered. */
+	void GetNodeHealth(TCallback<FGFCNodeHealth> Done);
 	/** Likes or unlikes (the node toggles). The result has the new state and like count. */
 	void ToggleLike(const FString& SeedId, TCallback<FGFCToggleResult> Done);
 	/** Bookmarks or removes the bookmark (the node toggles). */
@@ -257,4 +263,6 @@ private:
 	TSet<FString> BlockedUsers;
 	TSet<FString> ReportedSeeds;
 	TOptional<bool> LastKnownVerified;
+	TOptional<FGFCNodeHealth> CachedHealth;
+	FString CachedHealthUrl;
 };

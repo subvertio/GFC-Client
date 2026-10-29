@@ -132,4 +132,7 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UVerticalBox> EarnersList;
 	UPROPERTY(Transient) TObjectPtr<UTextBlock> NodeText;
 	UPROPERTY(Transient) TArray<TObjectPtr<UGFCRailLink>> TrendingLinks;
+	/** Top earner rows: tapping one opens that account's posts. */
+	UPROPERTY(Transient) TArray<TObjectPtr<UGFCRailLink>> EarnerLinks;
+	TArray<FString> EarnerOwners;
 };

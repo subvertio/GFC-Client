@@ -546,6 +546,11 @@ void UGFCCreateScreen::HandlePost()
 					WeakThis->ResultText->SetText(FText::FromString(R.Error));
 					WeakThis->ResultText->SetColorAndOpacity(FSlateColor(R.Error.Contains(TEXT("cancelled")) ? TextDim : Danger));
 				}
+				// The real network wants a verified phone first: offer it right here (the post stays written).
+				if (R.StatusCode == 403 && R.Error.Contains(TEXT("phone"), ESearchCase::IgnoreCase) && WeakThis->Root.IsValid())
+				{
+					WeakThis->Root->OfferPhoneVerification(FText::FromString(R.Error));
+				}
 				return;
 			}
 			WeakThis->Posted = Result.Seed;

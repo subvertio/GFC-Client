@@ -418,6 +418,39 @@ void UGFCApiClient::GetMySeeds(TCallback<TArray<FGFCSeed>> Done)
 	Call<TArray<FGFCSeed>>(TEXT("GET"), TEXT("/seeds/mine"), FString(), FString(), true, &FGFCJson::ParseFeed, MoveTemp(Done));
 }
 
+void UGFCApiClient::GetUserSeeds(const FString& Name, TCallback<TArray<FGFCSeed>> Done)
+{
+	Call<TArray<FGFCSeed>>(TEXT("GET"), TEXT("/users/") + FGFCUrl::Encode(Name) + TEXT("/seeds"), FString(), FString(),
+		!Token.IsEmpty(), &FGFCJson::ParseFeed, MoveTemp(Done));
+}
+
+void UGFCApiClient::GetUserProfile(const FString& Name, TCallback<FGFCProfile> Done)
+{
+	Call<FGFCProfile>(TEXT("GET"), TEXT("/users/") + FGFCUrl::Encode(Name), FString(), FString(), false,
+		&FGFCJson::ParseProfile, MoveTemp(Done));
+}
+
+void UGFCApiClient::GetNodeHealth(TCallback<FGFCNodeHealth> Done)
+{
+	if (CachedHealth.IsSet() && CachedHealthUrl == BaseUrl)
+	{
+		if (Done) Done(FGFCApiResult::Success(200), CachedHealth.GetValue());
+		return;
+	}
+	TWeakObjectPtr<UGFCApiClient> WeakThis(this);
+	const FString Url = BaseUrl;
+	Call<FGFCNodeHealth>(TEXT("GET"), TEXT("/health"), FString(), FString(), false, &FGFCJson::ParseHealth,
+		[WeakThis, Url, Done = MoveTemp(Done)](const FGFCApiResult& R, const FGFCNodeHealth& H)
+		{
+			if (R.bOk && WeakThis.IsValid())
+			{
+				WeakThis->CachedHealth = H;
+				WeakThis->CachedHealthUrl = Url;
+			}
+			if (Done) Done(R, H);
+		});
+}
+
 void UGFCApiClient::ToggleLike(const FString& SeedId, TCallback<FGFCToggleResult> Done)
 {
 	Call<FGFCToggleResult>(TEXT("POST"), TEXT("/seeds/") + FGFCUrl::Encode(SeedId) + TEXT("/like"), FormContentType, FString(), true,

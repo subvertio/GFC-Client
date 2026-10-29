@@ -65,6 +65,21 @@ bool FGFCNetworkStatsJsonTest::RunTest(const FString&)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGFCHealthJsonTest, "GFC.Desktop.HealthJson", DesktopApiFlags)
+bool FGFCHealthJsonTest::RunTest(const FString&)
+{
+	FGFCNodeHealth H;
+	TestTrue(TEXT("mainnet parses"), FGFCJson::ParseHealth(TEXT(R"({"status":"ok","network":"mainnet","phone_required_to_post":true})"), H));
+	TestEqual(TEXT("network"), H.Network, FString(TEXT("mainnet")));
+	TestTrue(TEXT("phone required"), H.bPhoneRequiredToPost);
+	TestTrue(TEXT("testnet parses"), FGFCJson::ParseHealth(TEXT(R"({"status":"ok","network":"testnet","phone_required_to_post":false})"), H));
+	TestFalse(TEXT("anyone posts on a test net"), H.bPhoneRequiredToPost);
+	TestTrue(TEXT("older node parses"), FGFCJson::ParseHealth(TEXT(R"({"status":"ok"})"), H));
+	TestFalse(TEXT("older node: no rule"), H.bPhoneRequiredToPost);
+	TestTrue(TEXT("older node: no network"), H.Network.IsEmpty());
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGFCSeedEditJsonTest, "GFC.Desktop.SeedEditJson", DesktopApiFlags)
 bool FGFCSeedEditJsonTest::RunTest(const FString&)
 {

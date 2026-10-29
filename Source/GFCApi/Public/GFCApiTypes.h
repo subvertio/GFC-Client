@@ -282,6 +282,15 @@ struct GFCAPI_API FGFCToggleResult
 	int32 Count = -1;
 };
 
+/** GET /health: which network the node is on and what it asks of posters (older nodes say neither). */
+struct GFCAPI_API FGFCNodeHealth
+{
+	/** "mainnet" or "testnet"; empty on older nodes. */
+	FString Network;
+	/** The real network: uploads need a verified phone (403 otherwise). Test nets let anyone post. */
+	bool bPhoneRequiredToPost = false;
+};
+
 /** One of the top earners in GET /podt/stats. */
 struct GFCAPI_API FGFCTopEarner
 {

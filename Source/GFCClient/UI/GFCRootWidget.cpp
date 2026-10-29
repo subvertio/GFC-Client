@@ -386,6 +386,7 @@ void UGFCRootWidget::UpdateDesktopNav()
 		case EGFCFeedSource::Explore: Item = EGFCNavItem::Explore; break;
 		case EGFCFeedSource::Bookmarks: Item = EGFCNavItem::Bookmarks; break;
 		case EGFCFeedSource::Mine: Item = EGFCNavItem::Profile; break;
+		case EGFCFeedSource::User: Item = EGFCNavItem::None; break;
 		default: Item = EGFCNavItem::Home; break;
 		}
 	}
@@ -495,6 +496,17 @@ void UGFCRootWidget::RefreshRightRail()
 void UGFCRootWidget::ShowExplore(const FString& Query) { ShowFeedPage(uint8(EGFCFeedSource::Explore), Query); }
 void UGFCRootWidget::ShowBookmarks() { ShowFeedPage(uint8(EGFCFeedSource::Bookmarks), FString()); }
 void UGFCRootWidget::ShowProfile() { ShowFeedPage(uint8(EGFCFeedSource::Mine), FString()); }
+
+void UGFCRootWidget::ShowUser(const FString& Username)
+{
+	const UGFCApiClient* C = GetGameInstance()->GetSubsystem<UGFCApiSubsystem>()->GetClient();
+	if (C->IsLoggedIn() && Username.Equals(C->GetUsername(), ESearchCase::IgnoreCase))
+	{
+		ShowProfile(); // your own page
+		return;
+	}
+	ShowFeedPage(uint8(EGFCFeedSource::User), Username);
+}
 void UGFCRootWidget::Logout() { HandleLogout(); }
 
 void UGFCRootWidget::ComposeFromFeed(const FString& PostBody, TOptional<EGFCCaptureSource> Pick, bool bPostNow)
@@ -503,11 +515,67 @@ void UGFCRootWidget::ComposeFromFeed(const FString& PostBody, TOptional<EGFCCapt
 	{
 		return;
 	}
-	ShowCreate();
-	CreateScreen->ComposeFrom(PostBody, Pick, bPostNow);
+	TWeakObjectPtr<UGFCRootWidget> WeakThis(this);
+	WhenAllowedToPost([WeakThis, PostBody, Pick, bPostNow]()
+	{
+		if (!WeakThis.IsValid() || !WeakThis->CreateScreen) return;
+		WeakThis->Activate(WeakThis->CreateScreen);
+		WeakThis->CreateScreen->ComposeFrom(PostBody, Pick, bPostNow);
+	});
 }
 void UGFCRootWidget::ShowWallet() { Activate(WalletScreen); }
-void UGFCRootWidget::ShowCreate() { Activate(CreateScreen); }
+
+void UGFCRootWidget::ShowCreate()
+{
+	TWeakObjectPtr<UGFCRootWidget> WeakThis(this);
+	WhenAllowedToPost([WeakThis]()
+	{
+		if (WeakThis.IsValid()) WeakThis->Activate(WeakThis->CreateScreen);
+	});
+}
+
+void UGFCRootWidget::WhenAllowedToPost(TFunction<void()> Then)
+{
+	UGFCApiClient* C = GetGameInstance()->GetSubsystem<UGFCApiSubsystem>()->GetClient();
+	// Logged out, or known verified: nothing to ask. The create screen handles logging in.
+	if (!C->IsLoggedIn() || C->GetLastKnownVerified().Get(false))
+	{
+		Then();
+		return;
+	}
+	TWeakObjectPtr<UGFCRootWidget> WeakThis(this);
+	TWeakObjectPtr<UGFCApiClient> WeakClient(C);
+	C->GetNodeHealth([WeakThis, WeakClient, Then = MoveTemp(Then)](const FGFCApiResult& R, const FGFCNodeHealth& Health) mutable
+	{
+		if (!WeakThis.IsValid() || !WeakClient.IsValid()) return;
+		// Test nets (and older nodes, which don't say) let anyone post.
+		if (!R.bOk || !Health.bPhoneRequiredToPost)
+		{
+			Then();
+			return;
+		}
+		WeakClient->GetVerifyStatus([WeakThis, Then = MoveTemp(Then)](const FGFCApiResult& S, const FGFCVerifyStatus& Status)
+		{
+			if (!WeakThis.IsValid()) return;
+			if (!S.bOk || Status.bVerified)
+			{
+				Then(); // can't tell: the upload itself says if it's refused
+				return;
+			}
+			WeakThis->OfferPhoneVerification(LOCTEXT("PhoneToPost",
+				"Verify your phone number to post on the GFC network. It takes a minute, and it keeps bots and spam out."));
+		});
+	});
+}
+
+void UGFCRootWidget::OfferPhoneVerification(const FText& Why)
+{
+	TWeakObjectPtr<UGFCRootWidget> WeakThis(this);
+	UGFCActionSheet::Show(this, Why, {LOCTEXT("VerifyPhone", "Verify my phone")}, [WeakThis](int32 Choice)
+	{
+		if (Choice == 0 && WeakThis.IsValid()) WeakThis->StartPhoneVerification();
+	});
+}
 
 void UGFCRootWidget::ShowSeed(const FGFCSeed& Seed)
 {
