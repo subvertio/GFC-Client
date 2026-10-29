@@ -69,6 +69,18 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> BackupTitleText;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> BackupResultText;
 
+	// Recovery code to save (after registering or making a new one): shown until the user confirms.
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UWidget> RecoveryCodePanel;
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> RecoveryCodeText;
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> CopyRecoveryButton;
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> SavedRecoveryButton;
+
+	// Account recovery: status, verify an email, make a new recovery code.
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> SecurityStatusText;
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> VerifyEmailButton;
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UEditableTextBox> RecoveryPasswordBox;
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> NewRecoveryButton;
+
 	// Send
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidget)) TObjectPtr<UEditableTextBox> RecipientBox;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidget)) TObjectPtr<UEditableTextBox> AmountBox;
@@ -87,6 +99,15 @@ private:
 	UFUNCTION() void HandleRefresh();
 	UFUNCTION() void HandleExport();
 	UFUNCTION() void HandleSend();
+	UFUNCTION() void HandleCopyRecovery();
+	UFUNCTION() void HandleSavedRecovery();
+	UFUNCTION() void HandleVerifyEmail();
+	UFUNCTION() void HandleNewRecovery();
+
+	/** Shows the root's pending recovery code, or hides the card when there's none. */
+	void ShowPendingRecoveryCode();
+	/** Asks the node what this account can recover with and updates the status line. */
+	void RefreshSecurity();
 
 	void RebuildPicker(const FString& SelectId);
 	/** This device's wallets changed (created, added, learned from the node): the picker and the right rail. */

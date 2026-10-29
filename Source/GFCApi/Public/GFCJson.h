@@ -31,6 +31,9 @@ struct GFCAPI_API FGFCJson
 	static bool ParseUploadResult(const FString& Body, FGFCUploadResult& Out);
 	static bool ParseVerifyStatus(const FString& Body, FGFCVerifyStatus& Out);
 	static bool ParseVerifyLink(const FString& Body, FGFCVerifyLink& Out);
+	static bool ParseEmailLink(const FString& Body, FGFCVerifyLink& Out);
+	static bool ParseAccountSecurity(const FString& Body, FGFCAccountSecurity& Out);
+	static bool ParseRecoveryCode(const FString& Body, FString& Out);
 	static bool ParseBlocks(const FString& Body, TArray<FString>& Out);
 	/** GET /search: {"seeds": [...], "transactions": [...]}; only the seeds are read. */
 	static bool ParseSearchSeeds(const FString& Body, TArray<FGFCSeed>& Out);

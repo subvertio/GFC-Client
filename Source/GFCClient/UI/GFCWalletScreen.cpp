@@ -18,6 +18,7 @@
 #include "GFCApiSubsystem.h"
 #include "GFCJson.h"
 #include "HAL/PlatformApplicationMisc.h"
+#include "HAL/PlatformProcess.h"
 #include "UI/GFCRewardBurst.h"
 #include "UI/GFCRootWidget.h"
 #include "UI/GFCUIStyle.h"
@@ -53,6 +54,28 @@ void UGFCWalletScreen::BuildDefaultLayout()
 	T->RootWidget = Scroll;
 	UVerticalBox* Left = MakeColumn(T);
 	Scroll->AddChild(Left);
+
+	// Recovery code to write down: first thing on screen after registering (or making a new code).
+	{
+		UBorder* Card = MakeCard(T, FMargin(18.f), &Warning);
+		UVerticalBox* Col = MakeColumn(T);
+		Card->AddChild(Col);
+		AddV(Col, MakeText(T, LOCTEXT("RecoveryTitle", "Write down your recovery code"), 18, Warning, true), 6.f);
+		AddV(Col, MakeText(T, LOCTEXT("RecoveryWhy",
+			"If you forget your password, reset it with your phone or email and this code, and your wallets come back with it. "
+			"It's shown only this once and GFC can't show it again. Keep it somewhere safe, away from your phone."), 12, Text), 12.f);
+		RecoveryCodeText = MakeText(T, FText::GetEmpty(), 20, Text, true);
+		AddV(Col, RecoveryCodeText, 12.f);
+		UHorizontalBox* Row = MakeRow(T);
+		CopyRecoveryButton = MakeButton(T, LOCTEXT("CopyCode", "Copy"), PanelRaised);
+		SavedRecoveryButton = MakeButton(T, LOCTEXT("SavedCode", "I've written it down"), Warning);
+		AddH(Row, CopyRecoveryButton, 8.f, true);
+		AddH(Row, SavedRecoveryButton, 0.f, true);
+		AddV(Col, Row, 0.f);
+		RecoveryCodePanel = Card;
+		RecoveryCodePanel->SetVisibility(ESlateVisibility::Collapsed);
+		AddV(Left, Card, 16.f);
+	}
 
 	// 0. Verify the phone: rewards (welcome grant, first post bonus, plays) wait for it.
 	{
@@ -94,9 +117,9 @@ void UGFCWalletScreen::BuildDefaultLayout()
 		BackupTitleText = MakeText(T, LOCTEXT("BackupTitle", "⚠ Back up your wallet"), 18, Warning, true);
 		AddV(Col, BackupTitleText, 6.f);
 		AddV(Col, MakeText(T, LOCTEXT("BackupWhy",
-			"Your wallet keys live encrypted on your node, unlocked by your password. If you forget the password or the node "
-			"loses its data, your GFC is gone. There is no reset. Export an encrypted backup and keep the file and its "
-			"passphrase somewhere safe, apart from each other. Anyone with both can spend your GFC."), 12, Text), 12.f);
+			"Your wallet keys live encrypted on your node, unlocked by your password (or your recovery code after a reset). "
+			"If you lose both, or the node loses its data, your GFC is gone. Export an encrypted backup and keep the file and "
+			"its passphrase somewhere safe, apart from each other. Anyone with both can spend your GFC."), 12, Text), 12.f);
 		BackupPasswordBox = MakeInput(T, LOCTEXT("PwHint", "your account password"), true);
 		BackupPassphraseBox = MakeInput(T, LOCTEXT("PpHint", "a new backup passphrase, 12+ characters"), true);
 		BackupConfirmBox = MakeInput(T, LOCTEXT("PcHint", "type the passphrase again"), true);
@@ -109,6 +132,22 @@ void UGFCWalletScreen::BuildDefaultLayout()
 		AddV(Col, BackupResultText, 0.f);
 		BackupPanel = Card;
 		AddV(Left, Card, 14.f);
+	}
+
+	// Account recovery: what a forgotten password can be reset with
+	{
+		UVerticalBox* Col = Section(T, Left, LOCTEXT("SecurityTitle", "Account recovery"));
+		SecurityStatusText = MakeText(T, FText::GetEmpty(), 12, TextDim);
+		AddV(Col, SecurityStatusText, 10.f);
+		VerifyEmailButton = MakeButton(T, LOCTEXT("VerifyEmail", "Verify an email"), PanelRaised);
+		AddV(Col, VerifyEmailButton, 6.f);
+		AddV(Col, MakeText(T, LOCTEXT("EmailWhy",
+			"A verified email can reset your password, or move your account to a new phone number. It opens a page in your "
+			"browser."), 11, TextDim), 14.f);
+		RecoveryPasswordBox = MakeInput(T, LOCTEXT("RecPwHint", "your account password"), true);
+		AddV(Col, MakeField(T, LOCTEXT("RecPw", "New recovery code (the old one stops working)"), RecoveryPasswordBox), 8.f);
+		NewRecoveryButton = MakeButton(T, LOCTEXT("NewCode", "Make a new recovery code"), PanelRaised);
+		AddV(Col, NewRecoveryButton, 0.f);
 	}
 
 	// 3. Balance, and the ID to receive GFC
@@ -164,6 +203,104 @@ void UGFCWalletScreen::BindEvents()
 	if (RefreshButton) RefreshButton->OnClicked.AddDynamic(this, &ThisClass::HandleRefresh);
 	if (ExportButton) ExportButton->OnClicked.AddDynamic(this, &ThisClass::HandleExport);
 	if (SendButton) SendButton->OnClicked.AddDynamic(this, &ThisClass::HandleSend);
+	if (CopyRecoveryButton) CopyRecoveryButton->OnClicked.AddDynamic(this, &ThisClass::HandleCopyRecovery);
+	if (SavedRecoveryButton) SavedRecoveryButton->OnClicked.AddDynamic(this, &ThisClass::HandleSavedRecovery);
+	if (VerifyEmailButton) VerifyEmailButton->OnClicked.AddDynamic(this, &ThisClass::HandleVerifyEmail);
+	if (NewRecoveryButton) NewRecoveryButton->OnClicked.AddDynamic(this, &ThisClass::HandleNewRecovery);
+}
+
+void UGFCWalletScreen::ShowPendingRecoveryCode()
+{
+	const FString Code = Root.IsValid() ? Root->PendingRecoveryCode : FString();
+	if (RecoveryCodeText) RecoveryCodeText->SetText(FText::FromString(Code));
+	if (RecoveryCodePanel) RecoveryCodePanel->SetVisibility(Code.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+}
+
+void UGFCWalletScreen::HandleCopyRecovery()
+{
+	if (Root.IsValid() && !Root->PendingRecoveryCode.IsEmpty())
+	{
+		FPlatformApplicationMisc::ClipboardCopy(*Root->PendingRecoveryCode);
+		ShowStatus(LOCTEXT("CodeCopied", "Recovery code copied. Paste it somewhere safe, then clear your clipboard."));
+	}
+}
+
+void UGFCWalletScreen::HandleSavedRecovery()
+{
+	if (Root.IsValid()) Root->PendingRecoveryCode.Reset();
+	ShowPendingRecoveryCode();
+	RefreshSecurity();
+}
+
+void UGFCWalletScreen::HandleVerifyEmail()
+{
+	UGFCApiClient* C = Client();
+	if (!C) return;
+	ShowStatus(LOCTEXT("OpeningEmail", "Opening email verification..."));
+	TWeakObjectPtr<UGFCWalletScreen> WeakThis(this);
+	C->CreateEmailLink([WeakThis](const FGFCApiResult& R, const FGFCVerifyLink& Link)
+	{
+		if (!WeakThis.IsValid()) return;
+		if (!R.bOk)
+		{
+			WeakThis->ShowStatus(FText::FromString(R.Error), true);
+			return;
+		}
+		FString Error;
+		FPlatformProcess::LaunchURL(*Link.Url, nullptr, &Error);
+		WeakThis->ShowStatus(Error.IsEmpty()
+			? LOCTEXT("EmailOpened", "Verify your email in the browser, then come back to GFC.")
+			: LOCTEXT("NoBrowserEmail", "Couldn't open the browser."), !Error.IsEmpty());
+	});
+}
+
+void UGFCWalletScreen::HandleNewRecovery()
+{
+	UGFCApiClient* C = Client();
+	const FString Password = RecoveryPasswordBox ? RecoveryPasswordBox->GetText().ToString() : FString();
+	if (!C) return;
+	if (Password.IsEmpty())
+	{
+		ShowStatus(LOCTEXT("NeedPwCode", "Enter your account password to make a new recovery code."), true);
+		return;
+	}
+	if (NewRecoveryButton) NewRecoveryButton->SetIsEnabled(false);
+	TWeakObjectPtr<UGFCWalletScreen> WeakThis(this);
+	C->NewRecoveryCode(Password, [WeakThis](const FGFCApiResult& R, const FString& Code)
+	{
+		if (!WeakThis.IsValid()) return;
+		if (WeakThis->NewRecoveryButton) WeakThis->NewRecoveryButton->SetIsEnabled(true);
+		if (WeakThis->RecoveryPasswordBox) WeakThis->RecoveryPasswordBox->SetText(FText::GetEmpty());
+		if (!R.bOk)
+		{
+			WeakThis->ShowStatus(R.StatusCode == 401 ? LOCTEXT("WrongPwCode", "That password isn't right.") : FText::FromString(R.Error), true);
+			return;
+		}
+		if (WeakThis->Root.IsValid()) WeakThis->Root->PendingRecoveryCode = Code;
+		WeakThis->ShowPendingRecoveryCode();
+		WeakThis->ShowStatus(LOCTEXT("NewCodeMade", "New recovery code made: write it down. Your old one no longer works."));
+	});
+}
+
+void UGFCWalletScreen::RefreshSecurity()
+{
+	UGFCApiClient* C = Client();
+	if (!C || !C->IsLoggedIn() || !SecurityStatusText) return;
+	TWeakObjectPtr<UGFCWalletScreen> WeakThis(this);
+	C->GetAccountSecurity([WeakThis](const FGFCApiResult& R, const FGFCAccountSecurity& S)
+	{
+		if (!WeakThis.IsValid() || !WeakThis->SecurityStatusText) return;
+		if (!R.bOk)
+		{
+			WeakThis->SecurityStatusText->SetText(LOCTEXT("SecurityUnknown", "This node doesn't offer account recovery yet."));
+			return;
+		}
+		const FText Code = S.bRecoveryCode ? LOCTEXT("CodeSet", "Recovery code: made") : LOCTEXT("CodeNone", "Recovery code: none yet, make one below");
+		const FText Email = S.bEmailVerified ? FText::Format(LOCTEXT("EmailSet", "Email: {0}"), FText::FromString(S.Email))
+		                                     : LOCTEXT("EmailNone", "Email: not verified");
+		const FText Phone = S.bPhoneVerified ? LOCTEXT("PhoneSet", "Phone: verified") : LOCTEXT("PhoneNone", "Phone: not verified");
+		WeakThis->SecurityStatusText->SetText(FText::Format(LOCTEXT("SecurityLine", "{0}\n{1}\n{2}"), Code, Email, Phone));
+	});
 }
 
 void UGFCWalletScreen::SetPhoneVerified(bool bVerified)
@@ -204,6 +341,8 @@ void UGFCWalletScreen::OnScreenShown()
 		});
 	}
 	if (BackupResultText) BackupResultText->SetText(FText::GetEmpty());
+	ShowPendingRecoveryCode();
+	RefreshSecurity();
 	Super::OnScreenShown();
 }
 

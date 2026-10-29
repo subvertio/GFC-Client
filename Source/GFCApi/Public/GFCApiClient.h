@@ -126,6 +126,15 @@ public:
 	/** A one-time page to verify the phone in the browser (Cloudflare Turnstile only runs in web pages). */
 	void CreateVerifyLink(TCallback<FGFCVerifyLink> Done);
 
+	// ---- account recovery (password reset itself is the node's /reset page) ----
+
+	/** What the account can recover with: recovery code set, verified email (masked), verified phone. */
+	void GetAccountSecurity(TCallback<FGFCAccountSecurity> Done);
+	/** A one-time link to verify an email address in the browser (POST /email/link). */
+	void CreateEmailLink(TCallback<FGFCVerifyLink> Done);
+	/** A new recovery code; the old one stops working. Needs the account password again. */
+	void NewRecoveryCode(const FString& Password, TCallback<FString> Done);
+
 	// ---- report / block ----
 
 	/** Reason is one of the node's: spam, nudity, violence, harassment, hate, scam, copyright, other. */

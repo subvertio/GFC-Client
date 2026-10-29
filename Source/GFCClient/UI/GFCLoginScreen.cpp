@@ -60,20 +60,24 @@ void UGFCLoginScreen::BuildDefaultLayout()
 	AddV(Col, MakeField(T, LOCTEXT("User", "Username"), UsernameBox), 12.f);
 	AddV(Col, MakeField(T, LOCTEXT("Pass", "Password"), PasswordBox), 6.f);
 	AddV(Col, MakeText(T, LOCTEXT("PasswordWarning",
-		"Your password also unlocks your wallet keys on the node. There is no reset: back up your wallet after you create it."),
+		"Your password also unlocks your wallets. Forgot it? Reset it with your phone or email, and the recovery code "
+		"you'll get when you create your account brings your wallets back with it."),
 		12, Warning), 12.f);
 	AddV(Col, MakeField(T, LOCTEXT("Email", "E-mail, for new accounts"), EmailBox), 20.f);
 
 	LoginButton = MakeButton(T, LOCTEXT("Login", "Log in"));
 	RegisterButton = MakeButton(T, LOCTEXT("Register", "Create account"), PanelRaised);
+	ForgotButton = MakeButton(T, LOCTEXT("Forgot", "Forgot password?"), PanelRaised);
 	AddV(Col, LoginButton, 10.f);
-	AddV(Col, RegisterButton, 0.f);
+	AddV(Col, RegisterButton, 10.f);
+	AddV(Col, ForgotButton, 0.f);
 }
 
 void UGFCLoginScreen::BindEvents()
 {
 	if (LoginButton) LoginButton->OnClicked.AddDynamic(this, &ThisClass::HandleLogin);
 	if (RegisterButton) RegisterButton->OnClicked.AddDynamic(this, &ThisClass::HandleRegister);
+	if (ForgotButton) ForgotButton->OnClicked.AddDynamic(this, &ThisClass::HandleForgot);
 	if (UseNodeButton) UseNodeButton->OnClicked.AddDynamic(this, &ThisClass::HandleUseNode);
 	if (LiveNodeButton) LiveNodeButton->OnClicked.AddDynamic(this, &ThisClass::HandleLiveNode);
 	if (LocalNodeButton) LocalNodeButton->OnClicked.AddDynamic(this, &ThisClass::HandleLocalNode);
@@ -186,9 +190,21 @@ void UGFCLoginScreen::HandleRegister()
 			return;
 		}
 		if (WeakThis->PasswordBox) WeakThis->PasswordBox->SetText(FText::GetEmpty());
-		WeakThis->ShowStatus(FText::Format(LOCTEXT("Created", "Account created. Welcome, {0}! Create your first wallet."), FText::FromString(A.Username)));
-		if (WeakThis->Root.IsValid()) WeakThis->Root->OnLoggedIn(true);
+		WeakThis->ShowStatus(FText::Format(LOCTEXT("Created", "Account created. Welcome, {0}! Save your recovery code, then create your first wallet."), FText::FromString(A.Username)));
+		if (WeakThis->Root.IsValid())
+		{
+			WeakThis->Root->PendingRecoveryCode = A.RecoveryCode;  // the wallet screen shows it until it's saved
+			WeakThis->Root->OnLoggedIn(true);
+		}
 	});
+}
+
+void UGFCLoginScreen::HandleForgot()
+{
+	if (Root.IsValid() && Root->OpenNodePage(TEXT("/reset")))
+	{
+		ShowStatus(LOCTEXT("ResetOpened", "Reset your password in the browser, then log in here with the new one."));
+	}
 }
 
 void UGFCLoginScreen::HandleLiveNode()

@@ -33,6 +33,36 @@ bool FGFCJsonAuthTest::RunTest(const FString&)
 	TestFalse(TEXT("missing token fails"), FGFCJson::ParseAuth(TEXT(R"({"ok": true, "user": "alice"})"), B));
 	TestFalse(TEXT("not JSON fails"), FGFCJson::ParseAuth(TEXT("<html>502</html>"), B));
 	TestFalse(TEXT("empty fails"), FGFCJson::ParseAuth(TEXT(""), B));
+
+	FGFCAuthResult C;
+	TestTrue(TEXT("register response parses"), FGFCJson::ParseAuth(
+		TEXT(R"({"ok": true, "token": "t", "user": "new", "recovery_code": "ABCDE-FGHJK-MNPQR-STUVW-XYZ23-45678"})"), C));
+	TestEqual(TEXT("recovery code"), C.RecoveryCode, TEXT("ABCDE-FGHJK-MNPQR-STUVW-XYZ23-45678"));
+	TestTrue(TEXT("login has no recovery code"), A.RecoveryCode.IsEmpty());
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGFCJsonRecoveryTest, "GFC.Api.Json.Recovery", GFCTestFlags)
+bool FGFCJsonRecoveryTest::RunTest(const FString&)
+{
+	FGFCAccountSecurity S;
+	TestTrue(TEXT("security parses"), FGFCJson::ParseAccountSecurity(
+		TEXT(R"({"recovery_code": true, "email": "a***@example.com", "email_verified": true, "phone_verified": false})"), S));
+	TestTrue(TEXT("code"), S.bRecoveryCode);
+	TestTrue(TEXT("email verified"), S.bEmailVerified);
+	TestEqual(TEXT("masked email"), S.Email, TEXT("a***@example.com"));
+	TestFalse(TEXT("phone"), S.bPhoneVerified);
+	TestFalse(TEXT("older node fails"), FGFCJson::ParseAccountSecurity(TEXT(R"({"detail": "Not Found"})"), S));
+
+	FGFCVerifyLink L;
+	TestTrue(TEXT("email link parses"), FGFCJson::ParseEmailLink(
+		TEXT(R"({"url": "https://node.example/account/email?f=abc", "expires_in": 1800})"), L));
+	TestEqual(TEXT("url"), L.Url, TEXT("https://node.example/account/email?f=abc"));
+	TestFalse(TEXT("other schemes refused"), FGFCJson::ParseEmailLink(TEXT(R"j({"url": "javascript:alert(1)"})j"), L));
+
+	FString Code;
+	TestTrue(TEXT("new code parses"), FGFCJson::ParseRecoveryCode(TEXT(R"({"recovery_code": "AAAAA-BBBBB"})"), Code));
+	TestFalse(TEXT("error fails"), FGFCJson::ParseRecoveryCode(TEXT(R"({"detail": "wrong password"})"), Code));
 	return true;
 }
 

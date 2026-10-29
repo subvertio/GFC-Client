@@ -81,6 +81,7 @@ bool FGFCJson::ParseAuth(const FString& Body, FGFCAuthResult& Out)
 	}
 	Out.Token = Str(Obj, TEXT("token"));
 	Out.Username = Str(Obj, TEXT("user"));
+	Out.RecoveryCode = Str(Obj, TEXT("recovery_code"));
 	return !Out.Token.IsEmpty() && !Out.Username.IsEmpty();
 }
 
@@ -387,6 +388,41 @@ bool FGFCJson::ParseVerifyLink(const FString& Body, FGFCVerifyLink& Out)
 	// Only ever open the node's own https page, whatever a node sends.
 	return Out.bVerified || Out.Url.StartsWith(TEXT("https://")) || Out.Url.StartsWith(TEXT("http://127.0.0.1"))
 		|| Out.Url.StartsWith(TEXT("http://localhost"));
+}
+
+bool FGFCJson::ParseEmailLink(const FString& Body, FGFCVerifyLink& Out)
+{
+	const TSharedPtr<FJsonObject> Obj = ParseObject(Body);
+	if (!Obj.IsValid())
+	{
+		return false;
+	}
+	Out.bVerified = false;
+	Out.Url = Str(Obj, TEXT("url"));
+	// Only ever open the node's own page, whatever a node sends.
+	return Out.Url.StartsWith(TEXT("https://")) || Out.Url.StartsWith(TEXT("http://127.0.0.1"))
+		|| Out.Url.StartsWith(TEXT("http://localhost"));
+}
+
+bool FGFCJson::ParseAccountSecurity(const FString& Body, FGFCAccountSecurity& Out)
+{
+	const TSharedPtr<FJsonObject> Obj = ParseObject(Body);
+	if (!Obj.IsValid() || !Obj->HasField(TEXT("recovery_code")))
+	{
+		return false;
+	}
+	Out.bRecoveryCode = Bool(Obj, TEXT("recovery_code"));
+	Out.bEmailVerified = Bool(Obj, TEXT("email_verified"));
+	Out.Email = Str(Obj, TEXT("email"));
+	Out.bPhoneVerified = Bool(Obj, TEXT("phone_verified"));
+	return true;
+}
+
+bool FGFCJson::ParseRecoveryCode(const FString& Body, FString& Out)
+{
+	const TSharedPtr<FJsonObject> Obj = ParseObject(Body);
+	Out = Obj.IsValid() ? Str(Obj, TEXT("recovery_code")) : FString();
+	return !Out.IsEmpty();
 }
 
 bool FGFCJson::ParseBlocks(const FString& Body, TArray<FString>& Out)

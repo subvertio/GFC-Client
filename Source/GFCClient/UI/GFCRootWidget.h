@@ -92,6 +92,15 @@ public:
 	/** Opens the node's phone verification page in the browser; the balance is checked on return. */
 	void StartPhoneVerification();
 
+	/**
+	 * A recovery code the user hasn't confirmed saving yet (from registering, or a new one from the
+	 * wallet screen). Kept in memory only: the wallet screen shows it until they tap "I've written it down".
+	 */
+	FString PendingRecoveryCode;
+
+	/** Opens a node page (e.g. "/reset") in the system browser. False if no browser opened. */
+	bool OpenNodePage(const FString& Path);
+
 	/** Reloads the right rail (balance, top earners) when it's showing, e.g. after this device learns a wallet. */
 	void RefreshRightRail();
 

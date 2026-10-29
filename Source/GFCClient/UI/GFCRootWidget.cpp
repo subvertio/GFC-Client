@@ -643,6 +643,19 @@ void UGFCRootWidget::OnPostHidden(const FString& SeedId)
 	}
 }
 
+bool UGFCRootWidget::OpenNodePage(const FString& Path)
+{
+	const FString Url = GetGameInstance()->GetSubsystem<UGFCApiSubsystem>()->GetClient()->GetBaseUrl() + Path;
+	FString Error;
+	FPlatformProcess::LaunchURL(*Url, nullptr, &Error);
+	if (!Error.IsEmpty())
+	{
+		ShowStatus(LOCTEXT("NoBrowserPage", "Couldn't open the browser."), true);
+		return false;
+	}
+	return true;
+}
+
 void UGFCRootWidget::StartPhoneVerification()
 {
 	UGFCApiClient* C = GetGameInstance()->GetSubsystem<UGFCApiSubsystem>()->GetClient();
