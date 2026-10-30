@@ -19,6 +19,8 @@ struct GFCAPI_API FGFCUploadRequest
 	FString Tags;
 	/** Optional JPEG thumbnail made on the device. */
 	TArray<uint8> ThumbnailJpeg;
+	/** "Exclusive to GFC Network" (videos and text posts only): sent as exclusive=true. */
+	bool bExclusive = false;
 };
 
 /**

@@ -4,6 +4,7 @@
 #include "Containers/Ticker.h"
 #include "Components/Border.h"
 #include "Components/Button.h"
+#include "Components/CheckBox.h"
 #include "Components/EditableTextBox.h"
 #include "Components/MultiLineEditableTextBox.h"
 #include "Components/Image.h"
@@ -32,6 +33,11 @@
 #include "Misc/Guid.h"
 #include "Misc/Paths.h"
 #include "GFCApiSubsystem.h"
+#include "GFCShare.h"
+#include "HAL/PlatformApplicationMisc.h"
+#include "HAL/PlatformProcess.h"
+#include "MediaTexture.h"
+#include "Viewer/GFCMediaSession.h"
 #include "UI/GFCRewardBurst.h"
 #include "UI/GFCRootWidget.h"
 #include "UI/GFCUIStyle.h"
@@ -127,6 +133,16 @@ void UGFCCreateScreen::BuildDefaultLayout()
 	MediaPanel = M;
 	AddV(F, M, 0.f);
 
+	// GFC Exclusive: the full video / text only for real GFC accounts; a 5-second teaser is public.
+	const FGFCTheme& Th = FGFCTheme::Get();
+	ExclusiveCheck = T->ConstructWidget<UCheckBox>();
+	ExclusiveCheck->SetIsChecked(false);
+	UTextBlock* CheckLabel = MakeText(T, LOCTEXT("ExclusiveCheck", "Exclusive to GFC Network"), 15, Th.Exclusive, true);
+	ExclusiveCheck->AddChild(CheckLabel); // the label is part of the checkbox: tapping it ticks the box
+	AddV(F, MinHeight(T, ExclusiveCheck, 40.f), 2.f);
+	ExclusiveHint = MakeText(T, FText::GetEmpty(), 12, TextDim);
+	AddV(F, ExclusiveHint, 12.f);
+
 	PostButton = MakeButton(T, LOCTEXT("Post", "Post"));
 	AddV(F, PostButton, 10.f);
 	UploadProgress = T->ConstructWidget<UProgressBar>();
@@ -139,6 +155,10 @@ void UGFCCreateScreen::BuildDefaultLayout()
 	AddV(F, CancelButton, 8.f);
 	ResultText = MakeText(T, FText::GetEmpty(), 14, Text);
 	AddV(F, ResultText, 8.f);
+	UTextBlock* ShareLabel = nullptr;
+	ShareTeaserButton = MakeButton(T, LOCTEXT("ShareTeaser", "Share teaser on X"), Accent, &ShareLabel);
+	ShareTeaserLabel = ShareLabel;
+	AddV(F, ShareTeaserButton, 8.f);
 	ViewPostButton = MakeButton(T, LOCTEXT("ViewPost", "View your post"), PanelRaised);
 	AddV(F, ViewPostButton, 0.f);
 
@@ -157,6 +177,8 @@ void UGFCCreateScreen::BindEvents()
 	if (HeaderPostButton) HeaderPostButton->OnClicked.AddDynamic(this, &ThisClass::HandlePost);
 	if (CancelButton) CancelButton->OnClicked.AddDynamic(this, &ThisClass::HandleCancel);
 	if (ViewPostButton) ViewPostButton->OnClicked.AddDynamic(this, &ThisClass::HandleViewPost);
+	if (ShareTeaserButton) ShareTeaserButton->OnClicked.AddDynamic(this, &ThisClass::HandleShareTeaser);
+	if (ExclusiveCheck) ExclusiveCheck->OnCheckStateChanged.AddDynamic(this, &ThisClass::HandleExclusiveChanged);
 }
 
 void UGFCCreateScreen::OnScreenShown()
@@ -171,13 +193,81 @@ void UGFCCreateScreen::OnScreenShown()
 		ShowMediaPanel();
 		SetUploading(false);
 	}
+	if (ShareTeaserButton && !PostedXPost.IsSet()) ShareTeaserButton->SetVisibility(ESlateVisibility::Collapsed);
+	UpdateExclusiveOption();
 	Super::OnScreenShown();
+}
+
+void UGFCCreateScreen::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
+	if (TeaserPlayer && PreviewImage)
+	{
+		TeaserPlayer->FitBrush(PreviewImage);
+	}
+	if (ScrollToResultFrames > 0 && --ScrollToResultFrames == 0 && FormScroll && ViewPostButton)
+	{
+		FormScroll->ScrollWidgetIntoView(ViewPostButton, true, EDescendantScrollDestination::BottomOrRight);
+	}
+}
+
+bool UGFCCreateScreen::CanPostExclusive() const
+{
+	if (Chosen.Path.IsEmpty() || bTextFile)
+	{
+		return true; // a text post
+	}
+	FGFCSeed Probe;
+	Probe.Full = Chosen.FileName;
+	Probe.ContentType = Chosen.MimeType.StartsWith(TEXT("video/")) ? FString(TEXT("video")) : FString();
+	return FGFCSeed::CanBeExclusive(Probe.GetMediaKind());
+}
+
+void UGFCCreateScreen::UpdateExclusiveOption()
+{
+	if (!ExclusiveCheck)
+	{
+		return;
+	}
+	const bool bCan = CanPostExclusive();
+	if (!bCan) ExclusiveCheck->SetIsChecked(false);
+	ExclusiveCheck->SetIsEnabled(bCan && !Job.IsValid());
+	if (ExclusiveHint)
+	{
+		const bool bOn = ExclusiveCheck->IsChecked();
+		const bool bText = Chosen.Path.IsEmpty() || bTextFile;
+		ExclusiveHint->SetText(!bCan ? LOCTEXT("ExclusiveOnlyFor", "Only videos and text posts can be exclusive.")
+			: !bOn ? LOCTEXT("ExclusiveOff", "Only real GFC accounts see all of it; the rest of the world gets a preview to share on X.")
+			: bText ? LOCTEXT("ExclusiveText", "Everyone sees the title. Only real GFC accounts can read the post.")
+			: LOCTEXT("ExclusiveVideo", "A 5-second teaser is public (share it on X). Only real GFC accounts can watch the full clip."));
+	}
+}
+
+void UGFCCreateScreen::HandleExclusiveChanged(bool bIsChecked)
+{
+	UpdateExclusiveOption();
+}
+
+void UGFCCreateScreen::SetExclusive(bool bExclusive)
+{
+	if (ExclusiveCheck)
+	{
+		ExclusiveCheck->SetIsChecked(bExclusive && CanPostExclusive());
+		UpdateExclusiveOption();
+	}
 }
 
 void UGFCCreateScreen::OnScreenHidden()
 {
 	// Off screen, the preview stops turning and rendering; it carries on when the screen comes back.
 	if (PreviewViewer) PreviewViewer->SetActorTickEnabled(false);
+	if (TeaserPlayer)
+	{
+		// The player goes; the downloaded teaser stays, to share from here later.
+		TeaserPlayer->Release();
+		TeaserPlayer = nullptr;
+		if (PreviewImage) PreviewImage->SetColorAndOpacity(FLinearColor::Transparent);
+	}
 	Super::OnScreenHidden();
 }
 
@@ -185,6 +275,7 @@ void UGFCCreateScreen::NativeDestruct()
 {
 	if (Job.IsValid()) Job->Cancel();
 	DiscardMedia();
+	ReleaseTeaser();
 	Super::NativeDestruct();
 }
 
@@ -213,7 +304,132 @@ void UGFCCreateScreen::HandleBodyChanged(const FText& NewText)
 
 void UGFCCreateScreen::ShowMediaPanel()
 {
-	if (MediaPanel) MediaPanel->SetVisibility(Chosen.Path.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+	// Also after posting an exclusive video: its teaser plays here.
+	const bool bTeaser = TeaserPlayer != nullptr || bTeaserLoading;
+	if (MediaPanel) MediaPanel->SetVisibility(Chosen.Path.IsEmpty() && !bTeaser ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+	if (RemoveMediaButton) RemoveMediaButton->SetVisibility(Chosen.Path.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+}
+
+void UGFCCreateScreen::LoadTeaser(const FGFCSeed& Seed)
+{
+	UGFCCacheSubsystem* Cache = GetGameInstance()->GetSubsystem<UGFCCacheSubsystem>();
+	const UGFCApiClient* C = Client();
+	if (!Cache || !C || Seed.Teaser.IsEmpty())
+	{
+		return;
+	}
+	bTeaserLoading = true;
+	if (FileText)
+	{
+		FileText->SetText(LOCTEXT("TeaserLoading", "Getting your teaser…"));
+		FileText->SetColorAndOpacity(FSlateColor(TextDim));
+	}
+	if (PreviewImage) PreviewImage->SetColorAndOpacity(FLinearColor::Transparent);
+	ShowMediaPanel();
+	TWeakObjectPtr<UGFCCreateScreen> WeakThis(this);
+	const FString Id = Seed.Id;
+	// Not the one live heavy item: it's small, and the feed may be playing something.
+	Cache->FetchFile(C->ResolveMediaUrl(Seed.Teaser), TeaserOwnerKey(), 64ll * 1024 * 1024, false,
+		[WeakThis, Id](EGFCFetchResult Result, const FString& Path, int64)
+		{
+			if (!WeakThis.IsValid() || WeakThis->Posted.Id != Id || !WeakThis->bTeaserLoading)
+			{
+				return;
+			}
+			WeakThis->bTeaserLoading = false;
+			if (Result != EGFCFetchResult::Ok)
+			{
+				if (WeakThis->FileText) WeakThis->FileText->SetText(LOCTEXT("TeaserFailed", "The teaser couldn't be downloaded. Share on X opens the post page instead."));
+				WeakThis->bShareWhenReady = false;
+				return;
+			}
+			WeakThis->TeaserFile = Path;
+			UGFCMediaSession* Player = NewObject<UGFCMediaSession>(WeakThis.Get());
+			Player->SetMuted(true);
+			if (Player->Open(WeakThis->GetWorld(), Path))
+			{
+				Player->SetLooping(true);
+				WeakThis->TeaserPlayer = Player;
+				if (WeakThis->PreviewImage && Player->GetVideoTexture())
+				{
+					WeakThis->PreviewImage->SetBrushResourceObject(Player->GetVideoTexture());
+					WeakThis->PreviewImage->SetColorAndOpacity(FLinearColor::White);
+				}
+			}
+			else
+			{
+				Player->Release();
+			}
+			if (WeakThis->FileText) WeakThis->FileText->SetText(LOCTEXT("TeaserReady", "Your 5-second teaser. The full clip is only on GFC."));
+			WeakThis->ShowMediaPanel();
+			WeakThis->ScrollToResultFrames = 3; // the preview grew: keep Share in view
+			if (WeakThis->bShareWhenReady)
+			{
+				WeakThis->bShareWhenReady = false;
+				WeakThis->ShareTeaserNow();
+			}
+		});
+}
+
+void UGFCCreateScreen::ReleaseTeaser()
+{
+	if (TeaserPlayer)
+	{
+		TeaserPlayer->Release();
+		TeaserPlayer = nullptr;
+	}
+	if (!Posted.Id.IsEmpty() && (bTeaserLoading || !TeaserFile.IsEmpty()))
+	{
+		if (UGFCCacheSubsystem* Cache = GetGameInstance() ? GetGameInstance()->GetSubsystem<UGFCCacheSubsystem>() : nullptr)
+		{
+			Cache->ReleaseOwner(TeaserOwnerKey()); // cancels the download and deletes the file
+		}
+	}
+	bTeaserLoading = false;
+	bShareWhenReady = false;
+	TeaserFile.Reset();
+	PostedXPost = FGFCXPost();
+	if (ShareTeaserButton) ShareTeaserButton->SetVisibility(ESlateVisibility::Collapsed);
+}
+
+void UGFCCreateScreen::HandleShareTeaser()
+{
+	if (!PostedXPost.IsSet())
+	{
+		return;
+	}
+	if (bTeaserLoading)
+	{
+		bShareWhenReady = true; // shares as soon as the clip is here
+		ShowStatus(LOCTEXT("TeaserWait", "Getting the teaser…"));
+		return;
+	}
+	ShareTeaserNow();
+}
+
+void UGFCCreateScreen::ShareTeaserNow()
+{
+	FString Saved;
+	const FString Intent = PostedXPost.Intent.IsEmpty()
+		? UGFCApiClient::BuildXIntentUrl(PostedXPost.Text, PostedXPost.Url) : PostedXPost.Intent;
+	const FString SaveName = FGFCShare::TeaserFileName(Posted.Title, Posted.Id);
+	switch (FGFCShare::ShareVideo(TeaserFile, SaveName, PostedXPost.ShareText(), Intent, &Saved))
+	{
+	case FGFCShare::EResult::SheetOpened:
+		ShowStatus(LOCTEXT("SheetOpened", "Pick X to post the teaser. It's also saved in your gallery (Movies/GFC)."));
+		break;
+	case FGFCShare::EResult::SavedAndOpened:
+		ShowStatus(FText::Format(LOCTEXT("SavedOpened", "Teaser saved to {0}. Attach it to the post that just opened on X."),
+			FText::FromString(FPaths::GetPath(Saved))));
+		break;
+	case FGFCShare::EResult::OpenedLink:
+		ShowStatus(LOCTEXT("OpenedX", "Opened X to share."));
+		break;
+	default:
+		FPlatformApplicationMisc::ClipboardCopy(*PostedXPost.ShareText());
+		ShowStatus(LOCTEXT("XFailed", "Couldn't open X, so the post text and link were copied instead."), true);
+		break;
+	}
 }
 
 void UGFCCreateScreen::UpdatePostEnabled()
@@ -223,6 +439,7 @@ void UGFCCreateScreen::UpdatePostEnabled()
 	const bool bCanPost = !bTooBig && (bHasText || !Chosen.Path.IsEmpty());
 	if (PostButton) PostButton->SetIsEnabled(bCanPost);
 	if (HeaderPostButton) HeaderPostButton->SetIsEnabled(bCanPost && !Job.IsValid());
+	UpdateExclusiveOption();
 }
 
 FString UGFCCreateScreen::TitleFromBody(const FString& Body)
@@ -307,6 +524,7 @@ void UGFCCreateScreen::UseFile(const FString& Path)
 void UGFCCreateScreen::OnChosen(const FGFCCapturedMedia& Media)
 {
 	DiscardMedia();
+	ReleaseTeaser(); // a new post: the last one's teaser goes
 	Chosen = Media;
 	ShowMediaPanel();
 	if (ResultText) ResultText->SetText(FText::GetEmpty());
@@ -462,6 +680,7 @@ void UGFCCreateScreen::SetUploading(bool bUploading)
 		if (S.Key) S.Key->SetIsEnabled(!bUploading && FGFCMediaCapture::IsSupported(S.Value));
 	}
 	if (RemoveMediaButton) RemoveMediaButton->SetIsEnabled(!bUploading);
+	if (ExclusiveCheck && bUploading) ExclusiveCheck->SetIsEnabled(false);
 	if (HeaderPostButton && bUploading) HeaderPostButton->SetIsEnabled(false);
 	if (BodyBox) BodyBox->SetIsReadOnly(bUploading);
 	if (!bUploading) UpdatePostEnabled();
@@ -475,6 +694,8 @@ void UGFCCreateScreen::HandlePost()
 	{
 		return;
 	}
+	ReleaseTeaser();
+	const bool bExclusive = ExclusiveCheck && ExclusiveCheck->IsChecked() && CanPostExclusive();
 	if (Chosen.Path.IsEmpty())
 	{
 		// Just text: the post is a small .txt seed; the text itself travels as the description.
@@ -502,6 +723,7 @@ void UGFCCreateScreen::HandlePost()
 		Req.Title = TitleFromBody(Body);
 	}
 	Req.Description = Body;
+	Req.bExclusive = bExclusive;
 	if (!Chosen.ThumbnailPath.IsEmpty())
 	{
 		FFileHelper::LoadFileToArray(Req.ThumbnailJpeg, *Chosen.ThumbnailPath);
@@ -579,6 +801,15 @@ void UGFCCreateScreen::HandlePost()
 			{
 				Message = FText::Format(LOCTEXT("NoRewards", "{0}\nCreate a wallet so your posts can earn GFC."), Message);
 			}
+			const bool bTeaser = Result.Seed.bExclusive && !Result.Seed.Teaser.IsEmpty();
+			if (Result.Seed.bExclusive)
+			{
+				Message = FText::Format(bTeaser
+					? LOCTEXT("PostedExclusiveVideo", "{0}\nExclusive to the GFC Network. Here's your 5-second teaser: share it on X, and the full clip stays for GFC accounts.")
+					: Result.Seed.GetMediaKind() == EGFCMediaKind::Video
+					? LOCTEXT("PostedExclusiveNoTeaser", "{0}\nExclusive to the GFC Network. The teaser is still being made; you can share the link on X now.")
+					: LOCTEXT("PostedExclusiveText", "{0}\nExclusive to the GFC Network. Share it on X: people see the title and come to GFC to read it."), Message);
+			}
 			if (WeakThis->ResultText)
 			{
 				WeakThis->ResultText->SetText(Message);
@@ -587,9 +818,26 @@ void UGFCCreateScreen::HandlePost()
 			if (WeakThis->ViewPostButton) WeakThis->ViewPostButton->SetVisibility(ESlateVisibility::Visible);
 			if (WeakThis->PostButton) WeakThis->PostButton->SetVisibility(ESlateVisibility::Collapsed);
 			WeakThis->DiscardMedia(); // the app's copy goes; the gallery copy stays the user's
+			WeakThis->PostedXPost = Result.Seed.bExclusive ? Result.XPost : FGFCXPost();
+			if (WeakThis->ShareTeaserButton)
+			{
+				WeakThis->ShareTeaserButton->SetVisibility(WeakThis->PostedXPost.IsSet() ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+				if (WeakThis->ShareTeaserLabel)
+				{
+					WeakThis->ShareTeaserLabel->SetText(bTeaser ? LOCTEXT("ShareTeaser", "Share teaser on X") : LOCTEXT("ShareOnX", "Share on X"));
+				}
+			}
+			if (bTeaser)
+			{
+				WeakThis->LoadTeaser(Result.Seed);
+			}
+			if (WeakThis->ExclusiveCheck) WeakThis->ExclusiveCheck->SetIsChecked(false);
 			WeakThis->ShowMediaPanel();
-				if (WeakThis->BodyBox) WeakThis->BodyBox->SetText(FText::GetEmpty());
-				if (WeakThis->TitleBox) WeakThis->TitleBox->SetText(FText::GetEmpty());
+			if (WeakThis->BodyBox) WeakThis->BodyBox->SetText(FText::GetEmpty());
+			if (WeakThis->TitleBox) WeakThis->TitleBox->SetText(FText::GetEmpty());
+			WeakThis->UpdateExclusiveOption();
+			// What happened, and what's next (share, view): in view under the form, once the layout has settled.
+			WeakThis->ScrollToResultFrames = 3;
 		});
 }
 

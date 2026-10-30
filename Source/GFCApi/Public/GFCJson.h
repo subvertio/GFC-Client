@@ -29,6 +29,8 @@ struct GFCAPI_API FGFCJson
 	static bool ParsePlayResult(const FString& Body, FGFCPlayResult& Out);
 	/** POST /seeds/upload, including repost_of when the node recognises a repost. */
 	static bool ParseUploadResult(const FString& Body, FGFCUploadResult& Out);
+	/** GET /seeds/{id}/play: {"exclusive", "full", "stream", "teaser", "text", "expires_in"}. */
+	static bool ParsePlayLinks(const FString& Body, FGFCPlayLinks& Out);
 	static bool ParseVerifyStatus(const FString& Body, FGFCVerifyStatus& Out);
 	static bool ParseVerifyLink(const FString& Body, FGFCVerifyLink& Out);
 	static bool ParseEmailLink(const FString& Body, FGFCVerifyLink& Out);

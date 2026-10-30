@@ -170,9 +170,61 @@ struct GFCAPI_API FGFCSeed
 	UPROPERTY(BlueprintReadOnly, Category = "GFC") bool bBookmarked = false;
 	/** Set when this seed is a repost of someone else's original. */
 	UPROPERTY(BlueprintReadOnly, Category = "GFC") FGFCRepostInfo RepostOf;
+	/**
+	 * A GFC Exclusive ("exclusive"): only real GFC accounts see all of it (GET /seeds/{id}/play). For a
+	 * video, Full is the public 5-second Teaser and Stream is empty; for a text post the title is public,
+	 * Description is empty and Full is empty.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "GFC") bool bExclusive = false;
+	/** An exclusive video's public 5-second teaser ("/teasers/<id>.mp4"); empty for text or if the cut failed. */
+	UPROPERTY(BlueprintReadOnly, Category = "GFC") FString Teaser;
 
 	/** Classifies the media from its content type, falling back to the file extension. */
 	EGFCMediaKind GetMediaKind() const;
+
+	/** Only videos and text posts can be exclusive to the GFC Network (the node refuses others). */
+	static bool CanBeExclusive(EGFCMediaKind Kind) { return Kind == EGFCMediaKind::Video || Kind == EGFCMediaKind::Text; }
+};
+
+/** GET /seeds/{id}/play: links to a post's full media. For exclusives they're signed and expire. */
+struct GFCAPI_API FGFCPlayLinks
+{
+	bool bExclusive = false;
+	FString Full;
+	/** The streaming copy, when there is one. */
+	FString Stream;
+	FString Teaser;
+	/** An exclusive text post's whole body. */
+	FString Text;
+	/** Seconds the signed links work for (0: they don't expire). */
+	int32 ExpiresIn = 0;
+
+	const FString& GetPlaybackPath() const { return Stream.IsEmpty() ? Full : Stream; }
+};
+
+/** May this account see a GFC Exclusive in full? */
+enum class EGFCExclusiveAccess : uint8
+{
+	/** Not exclusive, the poster, or a real account: GET /seeds/{id}/play gives the full post. */
+	Full,
+	/** Logged in, but the app doesn't know yet (ask /play). */
+	Unknown,
+	NeedsLogin,
+	/** The real network wants a verified phone (/play said 403). */
+	NeedsVerify,
+};
+
+/** POST /seeds/upload "x_post": a ready-made X post for an exclusive's teaser. */
+struct GFCAPI_API FGFCXPost
+{
+	FString Text;
+	FString Url;
+	/** https://x.com/intent/post?text=...&url=... */
+	FString Intent;
+
+	bool IsSet() const { return !Intent.IsEmpty() || !Url.IsEmpty(); }
+	/** What to put next to the attached teaser: the text and the link. */
+	FString ShareText() const { return Url.IsEmpty() ? Text : Text + TEXT(" ") + Url; }
 };
 
 /**
@@ -241,6 +293,8 @@ struct GFCAPI_API FGFCUploadResult
 	UPROPERTY(BlueprintReadOnly, Category = "GFC") double FirstPostBonus = 0.0;
 	/** The first-post bonus is waiting for the account's first wallet ("first_post_bonus_pending"). */
 	UPROPERTY(BlueprintReadOnly, Category = "GFC") bool bFirstPostBonusPending = false;
+	/** An exclusive post: the ready-made X post for its teaser (Seed.Teaser is the clip to attach). */
+	FGFCXPost XPost;
 };
 
 /** GET /verify/status: is the phone verified, what did verifying pay, and the account's wallets on the node. */

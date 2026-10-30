@@ -44,6 +44,7 @@ struct GFCCLIENT_API FGFCTheme
 	FLinearColor GoldDark;        // #B07A12  a coin's rim and stamp
 	FLinearColor Like;            // #F91880  a liked post's heart
 	FLinearColor SearchFill;      // #202327  the rounded search box
+	FLinearColor Exclusive;       // #FFD400  GFC Exclusives (the web's badge yellow)
 
 	float CornerRadius = 16.f;    // cards
 	float PillRadius = 24.f;      // buttons and inputs
@@ -118,6 +119,10 @@ namespace GFCUI
 	FButtonStyle GhostButtonStyle(const FLinearColor& Hover, float Radius = 24.f);
 	/** Small dim text that's tappable on its own (e.g. "Edited" after a post's time). */
 	UButton* MakeTextLink(UWidgetTree* Tree, const FText& Label, int32 Size = 14);
+	/** "★ Exclusive to the GFC Network" in the Exclusive yellow, on a pill. */
+	UWidget* MakeExclusiveBadge(UWidgetTree* Tree);
+	/** A yellow text button for "Log in / Verify your phone to watch the full clip"; set the text through OutLabel. */
+	UButton* MakeExclusiveLink(UWidgetTree* Tree, UTextBlock** OutLabel);
 
 	/** The GFC logo: "GFC" in white on an accent circle (the same mark as the Windows app icon). */
 	UWidget* MakeLogo(UWidgetTree* Tree, float Size = 40.f);

@@ -1,12 +1,14 @@
 # Runs the GFC automation tests headless (no window, no GPU).
 # Usage:  .\Scripts\RunTests.ps1                     (all GFC tests; the E2E test skips itself)
-#         .\Scripts\RunTests.ps1 -E2ENode http://127.0.0.1:8000 [-ExpectSeed <id>] [-SaveSession]
+#         .\Scripts\RunTests.ps1 -E2ENode http://127.0.0.1:8000 [-ExpectSeed <id>] [-SaveSession] [-E2EVideo clip.mp4]
 # Only point -E2ENode at a local test node (Scripts\RunLocalNode.ps1): it registers throwaway accounts.
+# -E2EVideo: a video of 5+ seconds for GFC.E2E.Exclusive to post as an exclusive (the node needs ffmpeg).
 param(
     [string]$Filter = 'GFC',
     [string]$E2ENode = '',
     [string]$ExpectSeed = '',
     [switch]$SaveSession,
+    [string]$E2EVideo = '',
     [string]$EngineDir = $(if ($env:UE_ROOT) { $env:UE_ROOT } else { 'C:\Program Files\Epic Games\UE_5.7' })
 )
 $ErrorActionPreference = 'Stop'
@@ -26,6 +28,7 @@ $testArgs = @(
 if ($E2ENode) { $testArgs += "-GFCE2ENode=$E2ENode" }
 if ($ExpectSeed) { $testArgs += "-GFCE2EExpectSeed=$ExpectSeed" }
 if ($SaveSession) { $testArgs += '-GFCE2ESaveSession' }
+if ($E2EVideo) { $testArgs += "-GFCE2EVideo=$((Resolve-Path $E2EVideo).Path)" }
 
 & $editor @testArgs | Out-Null
 $code = $LASTEXITCODE

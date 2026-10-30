@@ -133,6 +133,17 @@ public:
 	 */
 	void RecordPlay(const FString& SeedId, TCallback<FGFCPlayResult> Done);
 
+	// ---- GFC Exclusives ----
+
+	/**
+	 * Links to a post's full media (read token). For a GFC Exclusive they're signed and expire; they're
+	 * remembered until a minute before that. 401 logged out; 403 "Verify your phone number to watch GFC
+	 * Exclusives." for an unverified account on the real network.
+	 */
+	void GetPlayLinks(const FString& SeedId, TCallback<FGFCPlayLinks> Done);
+	/** What the app knows, without asking the node, about whether this account may see Seed in full. */
+	EGFCExclusiveAccess GetExclusiveAccess(const FGFCSeed& Seed) const;
+
 	// ---- phone verification (rewards need it) ----
 
 	/** Whether the account's phone is verified, what verifying paid, and the account's wallets. */
@@ -265,4 +276,8 @@ private:
 	TOptional<bool> LastKnownVerified;
 	TOptional<FGFCNodeHealth> CachedHealth;
 	FString CachedHealthUrl;
+	/** /play answers by seed id, with when they stop being usable (FPlatformTime seconds). */
+	TMap<FString, TPair<FGFCPlayLinks, double>> PlayLinksCache;
+	/** Seeds /play refused with 403 (unverified on the real network), this session. */
+	TSet<FString> LockedSeeds;
 };

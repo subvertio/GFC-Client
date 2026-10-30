@@ -49,6 +49,7 @@ const FGFCTheme& FGFCTheme::Get()
 		T.GoldDark = Hex(TEXT("B07A12"));
 		T.Like = Hex(TEXT("F91880"));
 		T.SearchFill = Hex(TEXT("202327"));
+		T.Exclusive = Hex(TEXT("FFD400"));
 		return T;
 	}();
 	return Theme;
@@ -120,6 +121,35 @@ namespace GFCUI
 		{
 			S->SetPadding(FMargin(4.f, 0.f));
 		}
+		return B;
+	}
+
+	UWidget* MakeExclusiveBadge(UWidgetTree* Tree)
+	{
+		const FGFCTheme& Th = FGFCTheme::Get();
+		UBorder* Pill = Tree->ConstructWidget<UBorder>();
+		Pill->SetBrush(FSlateRoundedBoxBrush(Th.Exclusive.CopyWithNewOpacity(0.12f), 12.f, Th.Exclusive, 1.f));
+		Pill->SetPadding(FMargin(10.f, 3.f));
+		UTextBlock* T = MakeText(Tree, LOCTEXT("ExclusiveBadge", "★ Exclusive to the GFC Network"), 13, Th.Exclusive, true);
+		T->SetAutoWrapText(false);
+		Pill->AddChild(T);
+		return Pill;
+	}
+
+	UButton* MakeExclusiveLink(UWidgetTree* Tree, UTextBlock** OutLabel)
+	{
+		const FGFCTheme& Th = FGFCTheme::Get();
+		UButton* B = Tree->ConstructWidget<UButton>();
+		B->SetStyle(GhostButtonStyle(Th.Exclusive.CopyWithNewOpacity(0.1f), 8.f));
+		B->SetTouchMethod(EButtonTouchMethod::PreciseTap);
+		UTextBlock* T = MakeText(Tree, FText::GetEmpty(), 14, Th.Exclusive, true);
+		B->AddChild(T);
+		if (UButtonSlot* S = Cast<UButtonSlot>(T->Slot))
+		{
+			S->SetPadding(FMargin(4.f, 6.f));
+			S->SetHorizontalAlignment(HAlign_Left);
+		}
+		if (OutLabel) *OutLabel = T;
 		return B;
 	}
 

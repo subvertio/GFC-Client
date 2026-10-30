@@ -39,5 +39,7 @@ EGFCMediaKind FGFCSeed::GetMediaKind() const
 	if (Video.Contains(Ext)) return EGFCMediaKind::Video;
 	if (Audio.Contains(Ext)) return EGFCMediaKind::Audio;
 	if (Ext == TEXT("txt") || Ext == TEXT("md")) return EGFCMediaKind::Text;
+	// An exclusive text post has no public file at all (an exclusive video still says "video").
+	if (bExclusive && Full.IsEmpty() && Teaser.IsEmpty()) return EGFCMediaKind::Text;
 	return EGFCMediaKind::Other;
 }
