@@ -42,6 +42,10 @@ bool FGFCMultipart::Build(const FGFCUploadRequest& R, FGFCMultipart& Out)
 	Field(TEXT("title"), R.Title);
 	Field(TEXT("description"), R.Description);
 	Field(TEXT("tags"), R.Tags);
+	if (R.bExclusive)
+	{
+		Field(TEXT("exclusive"), TEXT("true"));
+	}
 	if (R.ThumbnailJpeg.Num() > 0)
 	{
 		Append(Out.Prefix, FString::Printf(TEXT("--%s\r\nContent-Disposition: form-data; name=\"thumbnail\"; filename=\"thumb.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n"), *Out.Boundary));

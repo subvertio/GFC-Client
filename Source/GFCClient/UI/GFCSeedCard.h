@@ -84,6 +84,11 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> AuthorButton;
 	/** "Repost of @original": shown when the node matched this post to an earlier original. */
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> RepostText;
+	/** "★ Exclusive to the GFC Network" on GFC Exclusives. */
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UWidget> ExclusiveBadge;
+	/** Under an exclusive: "Log in / Verify your phone to watch the full clip", or "Read the full post". */
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> UnlockButton;
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> UnlockText;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> MoreButton;
 	/** "· Edited" after the time, when the poster changed the post: opens the edit history. */
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> EditedButton;
@@ -110,7 +115,11 @@ protected:
 private:
 	void BuildDefaultLayout();
 	void StopInline();
+	/** Downloads Path (a node media path) and plays it in the card. */
+	void PlayInline(const FString& Path);
 	void UpdateMediaControls();
+	void UpdateExclusive();
+	UFUNCTION() void HandleUnlockClicked();
 	void HandleOwnerReleased(const FString& Owner);
 
 	UFUNCTION() void HandleClicked();
@@ -139,6 +148,16 @@ private:
 
 /** Short label for a media kind ("3D model", "Image", ...). */
 GFCCLIENT_API FText GFCMediaKindLabel(EGFCMediaKind Kind);
+
+/**
+ * The line under a GFC Exclusive for this account: what unlocks it ("Log in to watch the full clip",
+ * "Verify your phone to read the full post"), or "Read the full post" for a text post they may read.
+ * Empty when nothing needs saying (a video they may watch).
+ */
+GFCCLIENT_API FText GFCExclusiveUnlockText(EGFCExclusiveAccess Access, EGFCMediaKind Kind);
+
+/** Does what GFCExclusiveUnlockText says: the login screen or phone verification. False if nothing to do. */
+GFCCLIENT_API bool GFCUnlockExclusive(const UObject* WorldContext, EGFCExclusiveAccess Access);
 
 /** Requests Url from the image cache and shows it in Image when it arrives (if Image still exists). */
 GFCCLIENT_API void GFCLoadImageInto(UUserWidget* Owner, UImage* Image, const FString& Url);

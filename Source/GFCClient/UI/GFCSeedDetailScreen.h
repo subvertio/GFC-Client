@@ -105,8 +105,24 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> DescriptionText;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> MetaText;
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> ShareLinkText;
+	/** "★ Exclusive to the GFC Network" on GFC Exclusives. */
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UWidget> ExclusiveBadge;
+	/** "Log in / Verify your phone to watch the full clip (read the full post)" while it's locked. */
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> UnlockButton;
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> UnlockText;
 
 private:
+	UFUNCTION() void HandleUnlock();
+	/** An exclusive this account may see: asks /play for the signed links (and a text post's body). */
+	void FetchPlayLinks();
+	/** What the player opens: an exclusive's full clip once /play answered, else its teaser; otherwise the usual copy. */
+	FString PlaybackPath() const;
+	/** The answer from GET /seeds/{id}/play for an exclusive, once it came. */
+	TOptional<FGFCPlayLinks> PlayLinks;
+	bool bFetchingLinks = false;
+	/** Play was pressed while the links were on their way. */
+	bool bLoadAfterLinks = false;
+
 	UFUNCTION() void HandleShare();
 	UFUNCTION() void HandleCopyLink();
 	UFUNCTION() void HandleBack();

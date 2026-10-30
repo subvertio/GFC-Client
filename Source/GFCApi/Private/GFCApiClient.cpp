@@ -57,6 +57,8 @@ void UGFCApiClient::SetSession(const FString& InUsername, const FString& InToken
 {
 	Username = InUsername;
 	Token = InToken;
+	PlayLinksCache.Reset(); // another account may see other exclusives
+	LockedSeeds.Reset();
 	OnSessionChanged.Broadcast();
 }
 
@@ -68,6 +70,8 @@ void UGFCApiClient::ClearSession()
 	BlockedUsers.Reset();
 	ReportedSeeds.Reset();
 	LastKnownVerified.Reset();
+	PlayLinksCache.Reset();
+	LockedSeeds.Reset();
 	if (bHad)
 	{
 		OnSessionChanged.Broadcast();
@@ -373,7 +377,11 @@ void UGFCApiClient::GetVerifyStatus(TCallback<FGFCVerifyStatus> Done)
 	Call<FGFCVerifyStatus>(TEXT("GET"), TEXT("/verify/status"), FString(), FString(), true, &FGFCJson::ParseVerifyStatus,
 		[WeakThis, Done](const FGFCApiResult& R, const FGFCVerifyStatus& S)
 		{
-			if (R.bOk && WeakThis.IsValid()) WeakThis->LastKnownVerified = S.bVerified;
+			if (R.bOk && WeakThis.IsValid())
+			{
+				WeakThis->LastKnownVerified = S.bVerified;
+				if (S.bVerified) WeakThis->LockedSeeds.Reset(); // just verified: exclusives open now
+			}
 			if (Done) Done(R, S);
 		});
 }
@@ -480,8 +488,66 @@ void UGFCApiClient::EditSeed(const FString& SeedId, const FGFCSeedEditRequest& E
 
 void UGFCApiClient::GetSeedEdits(const FString& SeedId, TCallback<TArray<FGFCSeedEdit>> Done)
 {
-	Call<TArray<FGFCSeedEdit>>(TEXT("GET"), TEXT("/seeds/") + FGFCUrl::Encode(SeedId) + TEXT("/edits"), FString(), FString(), false,
-		&FGFCJson::ParseSeedEdits, MoveTemp(Done));
+	// Public; with a token, an exclusive's old texts are included for accounts that may see it.
+	Call<TArray<FGFCSeedEdit>>(TEXT("GET"), TEXT("/seeds/") + FGFCUrl::Encode(SeedId) + TEXT("/edits"), FString(), FString(),
+		!Token.IsEmpty(), &FGFCJson::ParseSeedEdits, MoveTemp(Done));
+}
+
+void UGFCApiClient::GetPlayLinks(const FString& SeedId, TCallback<FGFCPlayLinks> Done)
+{
+	if (const TPair<FGFCPlayLinks, double>* Cached = PlayLinksCache.Find(SeedId); Cached && FPlatformTime::Seconds() < Cached->Value)
+	{
+		if (Done) Done(FGFCApiResult::Success(200), Cached->Key);
+		return;
+	}
+	TWeakObjectPtr<UGFCApiClient> WeakThis(this);
+	const FString User = Username;
+	Call<FGFCPlayLinks>(TEXT("GET"), TEXT("/seeds/") + FGFCUrl::Encode(SeedId) + TEXT("/play"), FString(), FString(), true,
+		&FGFCJson::ParsePlayLinks, [WeakThis, SeedId, User, Done = MoveTemp(Done)](const FGFCApiResult& R, const FGFCPlayLinks& Links)
+		{
+			if (WeakThis.IsValid() && WeakThis->Username == User)
+			{
+				if (R.bOk)
+				{
+					WeakThis->LockedSeeds.Remove(SeedId);
+					// Signed links: reuse them until a minute before they expire (or 5 minutes for plain links).
+					const double Ttl = Links.ExpiresIn > 0 ? FMath::Max(0.0, Links.ExpiresIn - 60.0) : 300.0;
+					WeakThis->PlayLinksCache.Add(SeedId, {Links, FPlatformTime::Seconds() + Ttl});
+				}
+				else if (R.StatusCode == 403)
+				{
+					WeakThis->LockedSeeds.Add(SeedId);
+				}
+			}
+			if (Done) Done(R, Links);
+		});
+}
+
+EGFCExclusiveAccess UGFCApiClient::GetExclusiveAccess(const FGFCSeed& Seed) const
+{
+	if (!Seed.bExclusive)
+	{
+		return EGFCExclusiveAccess::Full;
+	}
+	if (Token.IsEmpty())
+	{
+		return EGFCExclusiveAccess::NeedsLogin;
+	}
+	if (Seed.Owner.Equals(Username, ESearchCase::IgnoreCase) || PlayLinksCache.Contains(Seed.Id))
+	{
+		return EGFCExclusiveAccess::Full;
+	}
+	if (LockedSeeds.Contains(Seed.Id))
+	{
+		return EGFCExclusiveAccess::NeedsVerify;
+	}
+	// Test nets let any account watch; on the real network it's a verified phone.
+	const bool bTestNet = CachedHealth.IsSet() && CachedHealthUrl == BaseUrl && !CachedHealth->bPhoneRequiredToPost;
+	if (bTestNet || LastKnownVerified.Get(false))
+	{
+		return EGFCExclusiveAccess::Full;
+	}
+	return LastKnownVerified.IsSet() && CachedHealth.IsSet() ? EGFCExclusiveAccess::NeedsVerify : EGFCExclusiveAccess::Unknown;
 }
 
 FString UGFCApiClient::JoinTags(const TArray<FString>& Tags)

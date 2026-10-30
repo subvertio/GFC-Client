@@ -241,6 +241,8 @@ void FGFCJson::ReadSeed(const TSharedPtr<FJsonObject>& Obj, FGFCSeed& Out)
 	Out.bLiked = Bool(Obj, TEXT("liked"));
 	Out.bBookmarked = Bool(Obj, TEXT("bookmarked"));
 	ReadRepost(Obj, Out.RepostOf);
+	Out.bExclusive = Bool(Obj, TEXT("exclusive"));
+	Out.Teaser = Str(Obj, TEXT("teaser"));
 	if (Out.Title.IsEmpty())
 	{
 		Out.Title = FPaths::GetBaseFilename(Out.Full);
@@ -359,7 +361,31 @@ bool FGFCJson::ParseUploadResult(const FString& Body, FGFCUploadResult& Out)
 	Out.RepostOf = Out.Seed.RepostOf;
 	Out.FirstPostBonus = FMath::Max(0.0, Num(Obj, TEXT("first_post_bonus")));
 	Out.bFirstPostBonusPending = Bool(Obj, TEXT("first_post_bonus_pending"));
+	Out.XPost = FGFCXPost();
+	const TSharedPtr<FJsonObject>* X = nullptr;
+	if (Obj->TryGetObjectField(TEXT("x_post"), X) && X->IsValid())
+	{
+		Out.XPost.Text = Str(*X, TEXT("text"));
+		Out.XPost.Url = Str(*X, TEXT("url"));
+		Out.XPost.Intent = Str(*X, TEXT("intent"));
+	}
 	return !Out.Seed.Id.IsEmpty();
+}
+
+bool FGFCJson::ParsePlayLinks(const FString& Body, FGFCPlayLinks& Out)
+{
+	const TSharedPtr<FJsonObject> Obj = ParseObject(Body);
+	if (!Obj.IsValid() || !Obj->HasField(TEXT("full")))
+	{
+		return false;
+	}
+	Out.bExclusive = Bool(Obj, TEXT("exclusive"));
+	Out.Full = Str(Obj, TEXT("full"));
+	Out.Stream = Str(Obj, TEXT("stream"));
+	Out.Teaser = Str(Obj, TEXT("teaser"));
+	Out.Text = Str(Obj, TEXT("text"));
+	Out.ExpiresIn = static_cast<int32>(FMath::Max<int64>(0, Int(Obj, TEXT("expires_in"))));
+	return true;
 }
 
 bool FGFCJson::ParseVerifyStatus(const FString& Body, FGFCVerifyStatus& Out)

@@ -665,4 +665,213 @@ bool FGFCPhoneToPostE2ETest::RunTest(const FString&)
 	return true;
 }
 
+// GFC Exclusives on a test net (any account may watch there): the upload field, what the public sees,
+// and /play for the poster, another account and nobody. -GFCE2EVideo=<file.mp4> also posts an
+// exclusive video and checks its teaser and the signed links (the node needs ffmpeg for the teaser).
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGFCExclusiveE2ETest, "GFC.E2E.Exclusive",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ClientContext | EAutomationTestFlags::EngineFilter)
+bool FGFCExclusiveE2ETest::RunTest(const FString&)
+{
+	FString Node;
+	if (!FParse::Value(FCommandLine::Get(), TEXT("GFCE2ENode="), Node) || Node.IsEmpty())
+	{
+		AddInfo(TEXT("Skipped: pass -GFCE2ENode=http://127.0.0.1:8000 to run against a local test node."));
+		return true;
+	}
+	FString VideoPath;
+	FParse::Value(FCommandLine::Get(), TEXT("GFCE2EVideo="), VideoPath);
+	UGFCApiClient* C = NewObject<UGFCApiClient>(); // the poster
+	UGFCApiClient* V = NewObject<UGFCApiClient>(); // someone else, logged out first
+	for (UGFCApiClient* Each : {C, V})
+	{
+		Each->AddToRoot();
+		Each->SetBaseUrl(Node);
+		Each->TimeoutSeconds = 30.f;
+	}
+	struct FCtx
+	{
+		FString Poster = FString::Printf(TEXT("e2e_%s"), *FGuid::NewGuid().ToString(EGuidFormats::Digits).Left(10).ToLower());
+		FString Viewer = FString::Printf(TEXT("e2e_%s"), *FGuid::NewGuid().ToString(EGuidFormats::Digits).Left(10).ToLower());
+		FString Password = FGuid::NewGuid().ToString(EGuidFormats::Digits);
+		FString Body = TEXT("Only for the GFC Network.\nSecond line of the exclusive post.");
+		FString TextId, VideoId, Teaser;
+		FGFCPlayLinks VideoLinks;
+	};
+	TSharedRef<FCtx> X = MakeShared<FCtx>();
+	TSharedRef<FGFCE2ERunner> Run = MakeShared<FGFCE2ERunner>();
+	const FString Dir = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Automation/GFCE2E"));
+	auto Request = [Dir](const FString& Name, const FString& Content)
+	{
+		FGFCUploadRequest Req;
+		Req.FilePath = Dir / Name;
+		FFileHelper::SaveStringToFile(Content, *Req.FilePath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+		Req.FileName = Name;
+		Req.MimeType = FGFCMediaCapture::MimeForFile(Name);
+		Req.bExclusive = true;
+		return Req;
+	};
+
+	Run->Add(TEXT("node rules"), [this, C, Run](auto Next)
+	{
+		C->GetNodeHealth([this, Run, Next](const FGFCApiResult& R, const FGFCNodeHealth& H)
+		{
+			TestTrue(FString::Printf(TEXT("health ok (%s)"), *R.Error), R.bOk);
+			if (H.bPhoneRequiredToPost)
+			{
+				AddInfo(TEXT("Skipped: this node needs a verified phone to post (real-network rules)."));
+				Run->bStop = true;
+			}
+			Next();
+		});
+	});
+	Run->Add(TEXT("register poster"), [this, C, X](auto Next)
+	{
+		C->Register(X->Poster, X->Password, TEXT(""), [this, Next](const FGFCApiResult& R, const FGFCAuthResult&)
+		{
+			TestTrue(FString::Printf(TEXT("register ok (%s)"), *R.Error), R.bOk);
+			Next();
+		});
+	});
+	Run->Add(TEXT("images can't be exclusive"), [this, C, Request](auto Next)
+	{
+		FGFCUploadRequest Req = Request(TEXT("exclusive_photo.jpg"), TEXT("not really a jpeg"));
+		C->Upload(Req, nullptr, [this, Next](const FGFCApiResult& R, const FGFCUploadResult&)
+		{
+			TestEqual(TEXT("400"), R.StatusCode, 400);
+			TestTrue(FString::Printf(TEXT("says why (%s)"), *R.Error), R.Error.Contains(TEXT("Only videos and text posts")));
+			Next();
+		});
+	});
+	Run->Add(TEXT("exclusive text post"), [this, C, X, Request](auto Next)
+	{
+		FGFCUploadRequest Req = Request(TEXT("post.txt"), X->Body);
+		Req.Title = TEXT("E2E exclusive post");
+		Req.Description = X->Body;
+		C->Upload(Req, nullptr, [this, X, Next](const FGFCApiResult& R, const FGFCUploadResult& U)
+		{
+			TestTrue(FString::Printf(TEXT("upload ok (%s)"), *R.Error), R.bOk);
+			X->TextId = U.Seed.Id;
+			TestTrue(TEXT("exclusive"), U.Seed.bExclusive);
+			TestTrue(TEXT("no teaser for text"), U.Seed.Teaser.IsEmpty());
+			TestTrue(TEXT("x post"), U.XPost.IsSet());
+			TestTrue(TEXT("x intent"), U.XPost.Intent.StartsWith(TEXT("https://x.com/intent/")));
+			TestTrue(FString::Printf(TEXT("x text says it's exclusive (%s)"), *U.XPost.Text), U.XPost.Text.Contains(TEXT("exclusive to the GFC Network")));
+			TestTrue(TEXT("x link is the post's share page"), U.XPost.Url.EndsWith(TEXT("/p/") + U.Seed.Id));
+			Next();
+		});
+	});
+	Run->Add(TEXT("the public sees the title only"), [this, V, X](auto Next)
+	{
+		V->GetSeed(X->TextId, [this, V, Next](const FGFCApiResult& R, const FGFCSeed& S)
+		{
+			TestTrue(FString::Printf(TEXT("seed ok (%s)"), *R.Error), R.bOk);
+			TestTrue(TEXT("exclusive"), S.bExclusive);
+			TestEqual(TEXT("title public"), S.Title, FString(TEXT("E2E exclusive post")));
+			TestTrue(TEXT("body hidden"), S.Description.IsEmpty());
+			TestTrue(TEXT("no file link"), S.Full.IsEmpty());
+			TestEqual(TEXT("still a text post"), S.GetMediaKind(), EGFCMediaKind::Text);
+			TestEqual(TEXT("log in to read"), V->GetExclusiveAccess(S), EGFCExclusiveAccess::NeedsLogin);
+			V->GetPlayLinks(S.Id, [this, Next](const FGFCApiResult& P, const FGFCPlayLinks&)
+			{
+				TestEqual(TEXT("logged out: 401"), P.StatusCode, 401);
+				Next();
+			});
+		});
+	});
+	Run->Add(TEXT("the poster reads it"), [this, C, X](auto Next)
+	{
+		C->GetPlayLinks(X->TextId, [this, X, Next](const FGFCApiResult& R, const FGFCPlayLinks& L)
+		{
+			TestTrue(FString::Printf(TEXT("play ok (%s)"), *R.Error), R.bOk);
+			TestTrue(TEXT("exclusive"), L.bExclusive);
+			TestEqual(TEXT("the whole post"), L.Text, X->Body);
+			TestTrue(TEXT("signed link"), L.Full.Contains(TEXT("sig=")));
+			TestTrue(TEXT("expires"), L.ExpiresIn > 0);
+			Next();
+		});
+	});
+	Run->Add(TEXT("another account reads it (test net)"), [this, V, X](auto Next)
+	{
+		V->Register(X->Viewer, X->Password, TEXT(""), [this, V, X, Next](const FGFCApiResult& R, const FGFCAuthResult&)
+		{
+			TestTrue(FString::Printf(TEXT("register ok (%s)"), *R.Error), R.bOk);
+			V->GetPlayLinks(X->TextId, [this, X, Next](const FGFCApiResult& P, const FGFCPlayLinks& L)
+			{
+				TestTrue(FString::Printf(TEXT("play ok (%s)"), *P.Error), P.bOk);
+				TestEqual(TEXT("the whole post"), L.Text, X->Body);
+				Next();
+			});
+		});
+	});
+	if (!VideoPath.IsEmpty())
+	{
+		Run->Add(TEXT("exclusive video"), [this, C, X, VideoPath](auto Next)
+		{
+			FGFCUploadRequest Req;
+			Req.FilePath = FPaths::ConvertRelativePathToFull(VideoPath);
+			Req.FileName = FPaths::GetCleanFilename(VideoPath);
+			Req.MimeType = TEXT("video/mp4");
+			Req.Title = TEXT("E2E exclusive clip");
+			Req.bExclusive = true;
+			C->Upload(Req, nullptr, [this, X, Next](const FGFCApiResult& R, const FGFCUploadResult& U)
+			{
+				TestTrue(FString::Printf(TEXT("upload ok (%s)"), *R.Error), R.bOk);
+				X->VideoId = U.Seed.Id;
+				X->Teaser = U.Seed.Teaser;
+				TestTrue(TEXT("exclusive"), U.Seed.bExclusive);
+				TestTrue(TEXT("teaser cut (needs ffmpeg on the node)"), U.Seed.Teaser.StartsWith(TEXT("/teasers/")));
+				TestTrue(TEXT("x text mentions the preview"), U.XPost.Text.Contains(TEXT("5-second preview")));
+				Next();
+			});
+		});
+		Run->Add(TEXT("the teaser is public"), [this, V, X](auto Next)
+		{
+			V->DownloadBytes(V->ResolveMediaUrl(X->Teaser), 64ll * 1024 * 1024, [this, Next](bool bOk, const TArray<uint8>& Bytes)
+			{
+				TestTrue(TEXT("teaser downloads without a token"), bOk && Bytes.Num() > 1000);
+				AddInfo(FString::Printf(TEXT("teaser: %d bytes"), Bytes.Num()));
+				Next();
+			});
+		});
+		Run->Add(TEXT("the full clip needs a signed link"), [this, V, X](auto Next)
+		{
+			V->GetPlayLinks(X->VideoId, [this, V, X, Next](const FGFCApiResult& R, const FGFCPlayLinks& L)
+			{
+				TestTrue(FString::Printf(TEXT("play ok (%s)"), *R.Error), R.bOk);
+				TestTrue(TEXT("signed"), L.Full.Contains(TEXT("sig=")));
+				X->VideoLinks = L;
+				V->DownloadBytes(V->ResolveMediaUrl(L.Full), 256ll * 1024 * 1024, [this, V, L, Next](bool bOk, const TArray<uint8>& Full)
+				{
+					TestTrue(TEXT("signed link plays"), bOk && Full.Num() > 1000);
+					FString Plain, Query;
+					L.Full.Split(TEXT("?"), &Plain, &Query);
+					V->DownloadBytes(V->ResolveMediaUrl(Plain), 256ll * 1024 * 1024, [this, Next](bool bPlainOk, const TArray<uint8>&)
+					{
+						TestFalse(TEXT("the plain link is locked"), bPlainOk);
+						Next();
+					});
+				});
+			});
+		});
+	}
+
+	const double Start = FPlatformTime::Seconds();
+	ADD_LATENT_AUTOMATION_COMMAND(FFunctionLatentCommand([this, Run, C, V, Start]()
+	{
+		const bool bTimedOut = FPlatformTime::Seconds() - Start > 120.0;
+		if (bTimedOut)
+		{
+			AddError(FString::Printf(TEXT("timed out during step %d"), Run->Index));
+		}
+		if (!bTimedOut && !Run->Tick())
+		{
+			return false;
+		}
+		C->RemoveFromRoot();
+		V->RemoveFromRoot();
+		return true;
+	}));
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

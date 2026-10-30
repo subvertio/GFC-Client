@@ -41,6 +41,12 @@ public:
 
 	/** For tests and the PC -GFCPost=<file> shortcut: use a file already on disk. */
 	void UseFile(const FString& Path);
+	/** Ticks "Exclusive to GFC Network" (ignored for posts that can't be exclusive). */
+	void SetExclusive(bool bExclusive);
+	/** What the Post button does. */
+	void Post() { HandlePost(); }
+	/** Testing: press "Share teaser on X" as soon as an exclusive is posted (-GFCShareTeaser). */
+	bool bShareAfterPost = false;
 
 	/**
 	 * From the desktop feed's composer: carries the text over (replacing any unposted media),
@@ -73,8 +79,37 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> ViewPostButton;
 	/** The chosen media's preview and details; hidden for a text post. */
 	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UWidget> MediaPanel;
+	/** "Exclusive to GFC Network": only for videos and text posts (exclusive=true on upload). */
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<class UCheckBox> ExclusiveCheck;
+	/** Under the checkbox: what it does, or why it's off for this kind of post. */
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> ExclusiveHint;
+	/** After posting an exclusive: the teaser (or, for text, the post) to X. */
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UButton> ShareTeaserButton;
+	UPROPERTY(BlueprintReadOnly, Category = "GFC", meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> ShareTeaserLabel;
+
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
 private:
+	UFUNCTION() void HandleShareTeaser();
+	UFUNCTION() void HandleExclusiveChanged(bool bIsChecked);
+	/** Enables the checkbox for videos and text posts only (anything else unchecks it). */
+	void UpdateExclusiveOption();
+	bool CanPostExclusive() const;
+	/** After an exclusive video: downloads the teaser, plays it in the preview (muted, looping) and keeps it to share. */
+	void LoadTeaser(const FGFCSeed& Seed);
+	void ReleaseTeaser();
+	void ShareTeaserNow();
+	FString TeaserOwnerKey() const { return TEXT("teaser:") + Posted.Id; }
+
+	/** The exclusive just posted: its X post, and the teaser file once downloaded. */
+	FGFCXPost PostedXPost;
+	FString TeaserFile;
+	bool bTeaserLoading = false;
+	bool bShareWhenReady = false;
+	/** After posting: scroll the result into view this many frames from now (the layout settles first). */
+	int32 ScrollToResultFrames = 0;
+	UPROPERTY(Transient) TObjectPtr<class UGFCMediaSession> TeaserPlayer;
+
 	UFUNCTION() void HandlePhoto();
 	UFUNCTION() void HandleVideo();
 	UFUNCTION() void HandleGallery();

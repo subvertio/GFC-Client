@@ -46,6 +46,41 @@ FText GFCMediaKindLabel(EGFCMediaKind Kind)
 	}
 }
 
+FText GFCExclusiveUnlockText(EGFCExclusiveAccess Access, EGFCMediaKind Kind)
+{
+	const bool bText = Kind == EGFCMediaKind::Text;
+	switch (Access)
+	{
+	case EGFCExclusiveAccess::NeedsLogin:
+		return bText ? LOCTEXT("LoginToRead", "Log in to read the full post") : LOCTEXT("LoginToWatch", "Log in to watch the full clip");
+	case EGFCExclusiveAccess::NeedsVerify:
+		return bText ? LOCTEXT("VerifyToRead", "Verify your phone to read the full post")
+			: LOCTEXT("VerifyToWatch", "Verify your phone to watch the full clip");
+	default:
+		return bText ? LOCTEXT("ReadFull", "Read the full post →") : FText::GetEmpty();
+	}
+}
+
+bool GFCUnlockExclusive(const UObject* WorldContext, EGFCExclusiveAccess Access)
+{
+	UGFCRootWidget* Root = UGFCRootWidget::Find(WorldContext);
+	if (!Root)
+	{
+		return false;
+	}
+	if (Access == EGFCExclusiveAccess::NeedsLogin)
+	{
+		Root->ShowLogin();
+		return true;
+	}
+	if (Access == EGFCExclusiveAccess::NeedsVerify)
+	{
+		Root->StartPhoneVerification(); // the browser page; exclusives open when they come back verified
+		return true;
+	}
+	return false;
+}
+
 void GFCLoadImageInto(UUserWidget* Owner, UImage* Image, const FString& Url)
 {
 	if (!Owner || !Image)
@@ -97,6 +132,7 @@ void UGFCSeedCard::NativeOnInitialized()
 	if (EditedButton) EditedButton->OnClicked.AddDynamic(this, &ThisClass::HandleEditedClicked);
 	if (AvatarButton) AvatarButton->OnClicked.AddDynamic(this, &ThisClass::HandleAuthorClicked);
 	if (AuthorButton) AuthorButton->OnClicked.AddDynamic(this, &ThisClass::HandleAuthorClicked);
+	if (UnlockButton) UnlockButton->OnClicked.AddDynamic(this, &ThisClass::HandleUnlockClicked);
 	if (ReplyButton) ReplyButton->OnClicked.AddDynamic(this, &ThisClass::HandleClicked); // comments live on the post's screen
 	if (LikeButton) LikeButton->OnClicked.AddDynamic(this, &ThisClass::HandleLike);
 	if (BookmarkButton) BookmarkButton->OnClicked.AddDynamic(this, &ThisClass::HandleBookmark);
@@ -187,6 +223,9 @@ void UGFCSeedCard::BuildDefaultLayout()
 	RepostText = MakeText(T, FText::GetEmpty(), 13, TextDim);
 	AddV(Body, RepostText, 2.f);
 
+	ExclusiveBadge = MakeExclusiveBadge(T);
+	AddV(Body, ExclusiveBadge, 6.f);
+	if (UVerticalBoxSlot* S = Cast<UVerticalBoxSlot>(ExclusiveBadge->Slot)) S->SetHorizontalAlignment(HAlign_Left);
 	TitleText = MakeText(T, FText::GetEmpty(), 15, GFCUI::Text);
 	AddV(Body, TitleText, 6.f);
 	BodyText = MakeText(T, FText::GetEmpty(), 15, GFCUI::Text);
@@ -240,6 +279,13 @@ void UGFCSeedCard::BuildDefaultLayout()
 	ThumbBox->AddChild(ThumbBg);
 	AddV(Body, ThumbBox, 10.f);
 	MediaFrame = ThumbBox;
+
+	// Under an exclusive: what unlocks the rest (its own target, so it never opens the post by accident).
+	UTextBlock* UnlockLabel = nullptr;
+	UnlockButton = MakeExclusiveLink(T, &UnlockLabel);
+	UnlockText = UnlockLabel;
+	AddV(Body, UnlockButton, 8.f);
+	if (UVerticalBoxSlot* S = Cast<UVerticalBoxSlot>(UnlockButton->Slot)) S->SetHorizontalAlignment(HAlign_Left);
 
 	UHorizontalBox* Stats = MakeRow(T);
 	KindText = MakeText(T, FText::GetEmpty(), 13, AccentText, true);
@@ -467,6 +513,7 @@ void UGFCSeedCard::SetSeed(const FGFCSeed& InSeed)
 		AvatarSlot->ClearChildren();
 		AvatarSlot->AddChild(MakeAvatar(WidgetTree, Owner, 40.f));
 	}
+	UpdateExclusive();
 	if (KindText) KindText->SetText(GFCMediaKindLabel(Seed.GetMediaKind()));
 	if (MetaText)
 	{
@@ -494,10 +541,37 @@ FString UGFCSeedCard::ThumbUrl() const
 	return C->ResolveMediaUrl(Seed.Thumb);
 }
 
+void UGFCSeedCard::UpdateExclusive()
+{
+	if (ExclusiveBadge) ExclusiveBadge->SetVisibility(Seed.bExclusive ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	if (!UnlockButton)
+	{
+		return;
+	}
+	FText Line;
+	if (Seed.bExclusive)
+	{
+		const UGFCApiClient* C = GetGameInstance()->GetSubsystem<UGFCApiSubsystem>()->GetClient();
+		Line = GFCExclusiveUnlockText(C->GetExclusiveAccess(Seed), Seed.GetMediaKind());
+	}
+	if (UnlockText) UnlockText->SetText(Line);
+	UnlockButton->SetVisibility(Line.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+}
+
+void UGFCSeedCard::HandleUnlockClicked()
+{
+	const UGFCApiClient* C = GetGameInstance()->GetSubsystem<UGFCApiSubsystem>()->GetClient();
+	if (!GFCUnlockExclusive(this, C->GetExclusiveAccess(Seed)))
+	{
+		HandleClicked(); // "Read the full post": the post's screen fetches the text
+	}
+}
+
 void UGFCSeedCard::UpdateMediaControls()
 {
 	const EGFCMediaKind Kind = Seed.GetMediaKind();
 	const bool bPlayable = Kind == EGFCMediaKind::Video || Kind == EGFCMediaKind::Audio;
+	UpdateExclusive();
 	if (MediaLabel)
 	{
 		FText Label;
@@ -512,7 +586,9 @@ void UGFCSeedCard::UpdateMediaControls()
 		else if (bPlayable)
 		{
 			const UGFCMusicPlayer* Music = GetGameInstance()->GetSubsystem<UGFCMusicPlayer>();
-			Label = Kind == EGFCMediaKind::Video ? LOCTEXT("PlayVideo", "▶ Play video")
+			const EGFCExclusiveAccess Access = GetGameInstance()->GetSubsystem<UGFCApiSubsystem>()->GetClient()->GetExclusiveAccess(Seed);
+			const bool bTeaserOnly = Access == EGFCExclusiveAccess::NeedsLogin || Access == EGFCExclusiveAccess::NeedsVerify;
+			Label = Kind == EGFCMediaKind::Video ? (bTeaserOnly ? LOCTEXT("PlayTeaser", "▶ Play 5-second teaser") : LOCTEXT("PlayVideo", "▶ Play video"))
 				: (Music && Music->IsCurrent(Seed.Id) ? LOCTEXT("NowPlaying", "Now playing") : LOCTEXT("PlayAudio", "▶ Play audio"));
 		}
 		else if (Kind == EGFCMediaKind::Model3D)
@@ -565,10 +641,43 @@ void UGFCSeedCard::HandleMediaClicked()
 	{
 		return;
 	}
+	UGFCApiClient* C = GetGameInstance()->GetSubsystem<UGFCApiSubsystem>()->GetClient();
+	const EGFCExclusiveAccess Access = C->GetExclusiveAccess(Seed);
+	if (Seed.bExclusive && (Access == EGFCExclusiveAccess::Full || Access == EGFCExclusiveAccess::Unknown))
+	{
+		// A GFC Exclusive: the full clip comes from /play (signed links). Refused: the teaser, and the line says why.
+		bLoadingInline = true;
+		UpdateMediaControls();
+		TWeakObjectPtr<UGFCSeedCard> WeakThis(this);
+		const FString Id = Seed.Id;
+		C->GetPlayLinks(Id, [WeakThis, Id](const FGFCApiResult& R, const FGFCPlayLinks& Links)
+		{
+			if (!WeakThis.IsValid() || WeakThis->Seed.Id != Id || !WeakThis->bLoadingInline)
+			{
+				return;
+			}
+			WeakThis->bLoadingInline = false;
+			const bool bFull = R.bOk && !Links.GetPlaybackPath().IsEmpty();
+			if (!bFull && R.StatusCode != 403 && R.StatusCode != 401)
+			{
+				UE_LOG(LogGFCApi, Warning, TEXT("Exclusive links unavailable (%d); playing the teaser"), R.StatusCode);
+			}
+			WeakThis->PlayInline(bFull ? Links.GetPlaybackPath() : WeakThis->Seed.Teaser);
+		});
+		return;
+	}
+	PlayInline(Seed.bExclusive ? Seed.Teaser : Seed.GetPlaybackPath());
+}
+
+void UGFCSeedCard::PlayInline(const FString& MediaPath)
+{
+	const EGFCMediaKind Kind = Seed.GetMediaKind();
 	UGFCCacheSubsystem* Cache = GetGameInstance()->GetSubsystem<UGFCCacheSubsystem>();
 	const UGFCApiClient* C = GetGameInstance()->GetSubsystem<UGFCApiSubsystem>()->GetClient();
-	if (!Cache || !C || Seed.GetPlaybackPath().IsEmpty())
+	if (!Cache || !C || MediaPath.IsEmpty())
 	{
+		if (MediaLabel && Seed.bExclusive) MediaLabel->SetText(LOCTEXT("NoTeaser", "The teaser isn't ready yet."));
+		UpdateExclusive();
 		return;
 	}
 	bLoadingInline = true;
@@ -576,7 +685,7 @@ void UGFCSeedCard::HandleMediaClicked()
 	TWeakObjectPtr<UGFCSeedCard> WeakThis(this);
 	const FString Id = Seed.Id;
 	// The card becomes the one live heavy item: whatever else was playing stops.
-	Cache->FetchFile(C->ResolveMediaUrl(Seed.GetPlaybackPath()), OwnerKey(), int64(GetDefault<UGFCApiSettings>()->MaxDiskCacheMB) * 1024 * 1024 / 2, true,
+	Cache->FetchFile(C->ResolveMediaUrl(MediaPath), OwnerKey(), int64(GetDefault<UGFCApiSettings>()->MaxDiskCacheMB) * 1024 * 1024 / 2, true,
 		[WeakThis, Id, Kind](EGFCFetchResult Result, const FString& Path, int64)
 		{
 			if (!WeakThis.IsValid() || WeakThis->Seed.Id != Id || !WeakThis->bLoadingInline)

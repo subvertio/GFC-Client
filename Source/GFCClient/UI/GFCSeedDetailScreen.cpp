@@ -13,6 +13,7 @@
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
+#include "Components/VerticalBoxSlot.h"
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "GFCApi.h"
@@ -148,13 +149,21 @@ void UGFCSeedDetailScreen::BuildDefaultLayout()
 	MetaText = MakeText(T, FText::GetEmpty(), 12, TextDim);
 	DescriptionText = MakeText(T, FText::GetEmpty(), 15, Text);
 	AddV(Col, TitleText, 4.f);
+	ExclusiveBadge = MakeExclusiveBadge(T);
+	AddV(Col, ExclusiveBadge, 6.f);
+	if (UVerticalBoxSlot* S = Cast<UVerticalBoxSlot>(ExclusiveBadge->Slot)) S->SetHorizontalAlignment(HAlign_Left);
 	UHorizontalBox* OwnerRow = MakeRow(T);
 	AddH(OwnerRow, OwnerText, 4.f);
 	EditedButton = MakeTextLink(T, LOCTEXT("Edited", "· Edited"), 14);
 	AddH(OwnerRow, EditedButton, 0.f);
 	AddV(Col, OwnerRow, 8.f);
 	AddV(Col, MetaText, 12.f);
-	AddV(Col, DescriptionText, 20.f);
+	AddV(Col, DescriptionText, 12.f);
+	UTextBlock* UnlockLabel = nullptr;
+	UnlockButton = MakeExclusiveLink(T, &UnlockLabel);
+	UnlockText = UnlockLabel;
+	AddV(Col, UnlockButton, 12.f);
+	if (UVerticalBoxSlot* S = Cast<UVerticalBoxSlot>(UnlockButton->Slot)) S->SetHorizontalAlignment(HAlign_Left);
 
 	UHorizontalBox* Share = MakeRow(T);
 	ShareButton = MakeButton(T, LOCTEXT("ShareX", "Share on X"), PanelRaised);
@@ -177,6 +186,7 @@ void UGFCSeedDetailScreen::BindEvents()
 	if (PrimaryButton) PrimaryButton->OnClicked.AddDynamic(this, &ThisClass::HandlePrimary);
 	if (MoreButton) MoreButton->OnClicked.AddDynamic(this, &ThisClass::HandleMore);
 	if (EditedButton) EditedButton->OnClicked.AddDynamic(this, &ThisClass::HandleEdited);
+	if (UnlockButton) UnlockButton->OnClicked.AddDynamic(this, &ThisClass::HandleUnlock);
 	if (ModelView)
 	{
 		TWeakObjectPtr<UGFCSeedDetailScreen> WeakThis(this);
@@ -195,6 +205,9 @@ void UGFCSeedDetailScreen::SetSeed(const FGFCSeed& InSeed)
 	if (InSeed.Id != Seed.Id)
 	{
 		ReleaseContent();
+		PlayLinks.Reset();
+		bFetchingLinks = false;
+		bLoadAfterLinks = false;
 	}
 	Seed = InSeed;
 	SetState(EGFCDetailState::Thumbnail);
@@ -219,9 +232,11 @@ void UGFCSeedDetailScreen::OnScreenShown()
 				WeakThis->Seed.bLiked = bLiked; // /seeds/{id} has no per-user state
 				WeakThis->Seed.bBookmarked = bBookmarked;
 				WeakThis->Render();
+				WeakThis->FetchPlayLinks(); // it may have become exclusive since the feed loaded
 			}
 		});
 	}
+	FetchPlayLinks();
 	Super::OnScreenShown();
 
 	// Development checks (docs/cache-policy.md): -GFCAutoView opens the full content right away.
@@ -242,6 +257,7 @@ void UGFCSeedDetailScreen::LogResourceUsage(const TCHAR* When) const
 void UGFCSeedDetailScreen::OnScreenHidden()
 {
 	// Scrolled away from this card: everything it loaded goes.
+	bLoadAfterLinks = false;
 	ReleaseContent();
 	Tracker.End();
 	SetState(EGFCDetailState::Thumbnail);
@@ -250,6 +266,62 @@ void UGFCSeedDetailScreen::OnScreenHidden()
 FString UGFCSeedDetailScreen::GetShareUrl() const
 {
 	return UGFCApiClient::BuildShareUrl(Seed.Id);
+}
+
+void UGFCSeedDetailScreen::FetchPlayLinks()
+{
+	UGFCApiClient* C = Client();
+	if (!C || !Seed.bExclusive || PlayLinks.IsSet() || bFetchingLinks)
+	{
+		return;
+	}
+	const EGFCExclusiveAccess Access = C->GetExclusiveAccess(Seed);
+	if (Access != EGFCExclusiveAccess::Full && Access != EGFCExclusiveAccess::Unknown)
+	{
+		return; // logged out, or already refused: the teaser (or title) is all there is
+	}
+	bFetchingLinks = true;
+	TWeakObjectPtr<UGFCSeedDetailScreen> WeakThis(this);
+	const FString Id = Seed.Id;
+	C->GetPlayLinks(Id, [WeakThis, Id](const FGFCApiResult& R, const FGFCPlayLinks& Links)
+	{
+		if (!WeakThis.IsValid() || WeakThis->Seed.Id != Id)
+		{
+			return;
+		}
+		WeakThis->bFetchingLinks = false;
+		if (R.bOk)
+		{
+			WeakThis->PlayLinks = Links;
+		}
+		else if (R.StatusCode != 403 && R.StatusCode != 401)
+		{
+			WeakThis->ShowStatus(FText::FromString(R.Error), true);
+		}
+		WeakThis->Render(); // the body of a text post, or the lock line
+		if (WeakThis->bLoadAfterLinks)
+		{
+			WeakThis->bLoadAfterLinks = false;
+			WeakThis->LoadFullContent(); // the full clip, or the teaser if the node said no
+		}
+	});
+}
+
+FString UGFCSeedDetailScreen::PlaybackPath() const
+{
+	if (!Seed.bExclusive)
+	{
+		return Seed.GetPlaybackPath();
+	}
+	return PlayLinks.IsSet() && !PlayLinks->GetPlaybackPath().IsEmpty() ? PlayLinks->GetPlaybackPath() : Seed.Teaser;
+}
+
+void UGFCSeedDetailScreen::HandleUnlock()
+{
+	if (const UGFCApiClient* C = Client())
+	{
+		GFCUnlockExclusive(this, C->GetExclusiveAccess(Seed));
+	}
 }
 
 int64 UGFCSeedDetailScreen::MaxBytesForKind() const
@@ -274,12 +346,32 @@ void UGFCSeedDetailScreen::Render()
 			: FText::Format(LOCTEXT("ByWhen", "by {0} · {1}"), FText::FromString(Seed.Owner), When));
 	}
 	if (EditedButton) EditedButton->SetVisibility(Seed.EditedAt.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+	const UGFCApiClient* Api = Client();
+	const EGFCExclusiveAccess Access = Api ? Api->GetExclusiveAccess(Seed) : EGFCExclusiveAccess::NeedsLogin;
 	if (DescriptionText)
 	{
-		DescriptionText->SetText(Seed.Description.IsEmpty() ? LOCTEXT("NoDesc", "No description.") : FText::FromString(Seed.Description));
+		// An exclusive text post's body comes from /play; until then (or when locked) only the title is shown.
+		const bool bExclusiveText = Seed.bExclusive && Kind == EGFCMediaKind::Text;
+		const FString Body = bExclusiveText && PlayLinks.IsSet() ? PlayLinks->Text : Seed.Description;
+		FText Shown = FText::FromString(Body);
+		if (Body.IsEmpty())
+		{
+			Shown = !Seed.bExclusive ? LOCTEXT("NoDesc", "No description.")
+				: bExclusiveText && bFetchingLinks ? LOCTEXT("LoadingPost", "Loading the post…") : FText::GetEmpty();
+		}
+		DescriptionText->SetText(Shown);
+		DescriptionText->SetVisibility(Shown.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
 		FSlateFontInfo Font = DescriptionText->GetFont();
 		Font.Size = Kind == EGFCMediaKind::Text ? 18 : 15; // a text post reads bigger
 		DescriptionText->SetFont(Font);
+	}
+	if (ExclusiveBadge) ExclusiveBadge->SetVisibility(Seed.bExclusive ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	if (UnlockButton)
+	{
+		// Only what unlocks it: the post's screen already shows what they may see.
+		const bool bLocked = Seed.bExclusive && (Access == EGFCExclusiveAccess::NeedsLogin || Access == EGFCExclusiveAccess::NeedsVerify);
+		if (UnlockText) UnlockText->SetText(bLocked ? GFCExclusiveUnlockText(Access, Kind) : FText::GetEmpty());
+		UnlockButton->SetVisibility(bLocked ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	}
 	const ESlateVisibility MediaVis = Kind == EGFCMediaKind::Text ? ESlateVisibility::Collapsed : ESlateVisibility::Visible;
 	if (PreviewFrame) PreviewFrame->SetVisibility(MediaVis);
@@ -325,7 +417,9 @@ void UGFCSeedDetailScreen::SetState(EGFCDetailState NewState, const FText& Note)
 		{
 		case EGFCMediaKind::Model3D: Label = LOCTEXT("View3D", "View in 3D"); break;
 		case EGFCMediaKind::Image: Label = LOCTEXT("ViewImage", "View full image"); break;
-		case EGFCMediaKind::Video: Label = LOCTEXT("PlayVideo", "Play video"); break;
+		case EGFCMediaKind::Video:
+			Label = Seed.bExclusive && PlaybackPath() == Seed.Teaser ? LOCTEXT("PlayTeaser", "Play the 5-second teaser") : LOCTEXT("PlayVideo", "Play video");
+			break;
 		case EGFCMediaKind::Audio: Label = LOCTEXT("PlayAudio", "Play audio"); break;
 		default: Label = LOCTEXT("NoPreview", "No in-app preview"); bButtonEnabled = false; break;
 		}
@@ -394,6 +488,10 @@ void UGFCSeedDetailScreen::ApplyEdit(const FGFCSeed& Updated)
 	Seed.Description = Updated.Description;
 	Seed.Tags = Updated.Tags;
 	Seed.EditedAt = Updated.EditedAt;
+	if (PlayLinks.IsSet() && Seed.bExclusive && Seed.GetMediaKind() == EGFCMediaKind::Text)
+	{
+		PlayLinks->Text = Updated.Description; // the poster's own new text
+	}
 	Render();
 }
 
@@ -426,12 +524,19 @@ void UGFCSeedDetailScreen::LoadFullContent()
 {
 	UGFCCacheSubsystem* Cache = GetGameInstance()->GetSubsystem<UGFCCacheSubsystem>();
 	const UGFCApiClient* C = Client();
-	if (!Cache || !C || Seed.GetPlaybackPath().IsEmpty())
+	if (!Cache || !C || PlaybackPath().IsEmpty())
 	{
+		if (Seed.bExclusive) SetState(EGFCDetailState::Failed, LOCTEXT("NoTeaser", "The teaser isn't ready yet. Try again in a minute."));
 		return;
 	}
-	// FileSize is the original's; a streaming copy is much smaller (the download's own cap still applies).
-	const bool bStreamCopy = !Seed.Stream.IsEmpty();
+	if (Seed.bExclusive && bFetchingLinks)
+	{
+		bLoadAfterLinks = true; // the full clip's links are on their way: play as soon as they're here
+		SetState(EGFCDetailState::Downloading);
+		return;
+	}
+	// FileSize is the original's; a streaming copy (or an exclusive's teaser) is much smaller (the download's own cap still applies).
+	const bool bStreamCopy = Seed.bExclusive ? PlaybackPath() != (PlayLinks.IsSet() ? PlayLinks->Full : FString()) : !Seed.Stream.IsEmpty();
 	const int64 Cap = MaxBytesForKind();
 	if (!bStreamCopy && Seed.FileSize > Cap)
 	{
@@ -454,10 +559,11 @@ void UGFCSeedDetailScreen::LoadFullContent()
 void UGFCSeedDetailScreen::StartDownload()
 {
 	UGFCCacheSubsystem* Cache = GetGameInstance()->GetSubsystem<UGFCCacheSubsystem>();
-	const FString Url = Client()->ResolveMediaUrl(Seed.GetPlaybackPath());
+	const FString MediaPath = PlaybackPath();
+	const FString Url = Client()->ResolveMediaUrl(MediaPath);
 	const uint32 Serial = ++LoadSerial;
 	LoadStarted = FPlatformTime::Seconds();
-	SetState(EGFCDetailState::Downloading, Seed.FileSize > 0 && Seed.Stream.IsEmpty()
+	SetState(EGFCDetailState::Downloading, Seed.FileSize > 0 && Seed.Stream.IsEmpty() && MediaPath == Seed.Full && !Seed.bExclusive
 		? FText::Format(LOCTEXT("DlSize", "Downloading {0}…"), FileSize(Seed.FileSize))
 		: LOCTEXT("Dl", "Downloading…"));
 
