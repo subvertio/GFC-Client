@@ -838,6 +838,10 @@ void UGFCCreateScreen::HandlePost()
 			WeakThis->UpdateExclusiveOption();
 			// What happened, and what's next (share, view): in view under the form, once the layout has settled.
 			WeakThis->ScrollToResultFrames = 3;
+			if (WeakThis->bShareAfterPost && WeakThis->PostedXPost.IsSet())
+			{
+				WeakThis->HandleShareTeaser();
+			}
 		});
 }
 

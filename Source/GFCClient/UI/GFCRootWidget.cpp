@@ -431,11 +431,13 @@ bool UGFCRootWidget::OpenStartScreenFromCommandLine()
 		{
 			CreateScreen->UseFile(PostFile);
 		}
-		// -GFCPostExclusive ticks "Exclusive to GFC Network"; -GFCPostNow posts right away.
+		// -GFCPostExclusive ticks "Exclusive to GFC Network"; -GFCPostNow posts right away;
+		// -GFCShareTeaser then presses "Share teaser on X".
 		if (FParse::Param(FCommandLine::Get(), TEXT("GFCPostExclusive")))
 		{
 			CreateScreen->SetExclusive(true);
 		}
+		CreateScreen->bShareAfterPost = FParse::Param(FCommandLine::Get(), TEXT("GFCShareTeaser"));
 		if (FParse::Param(FCommandLine::Get(), TEXT("GFCPostNow")))
 		{
 			CreateScreen->Post();

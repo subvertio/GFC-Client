@@ -45,6 +45,8 @@ public:
 	void SetExclusive(bool bExclusive);
 	/** What the Post button does. */
 	void Post() { HandlePost(); }
+	/** Testing: press "Share teaser on X" as soon as an exclusive is posted (-GFCShareTeaser). */
+	bool bShareAfterPost = false;
 
 	/**
 	 * From the desktop feed's composer: carries the text over (replacing any unposted media),
